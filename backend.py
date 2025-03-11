@@ -42,7 +42,9 @@ def handle_message(message):
         day = message.get("day")
         name = message.get("name")
         remark = message.get("remark", "")
-        record = {"name": name, "remark": remark}
+        # Set status explicitly: "remark" if a remark exists, else "checkin"
+        status = "remark" if remark else "checkin"
+        record = {"name": name, "remark": remark, "status": status}
         if day not in data_store["checkins"]:
             data_store["checkins"][day] = []
         data_store["checkins"][day].append(record)
@@ -60,6 +62,18 @@ def handle_message(message):
             print(f"{name}'s check-in on day {day} canceled")
             save_data()
             emit("message", {"info": f"{name}'s check-in on day {day} canceled"}, broadcast=True)
+    elif action == "toggle_status":
+        day = message.get("day")
+        name = message.get("name")
+        if day in data_store["checkins"]:
+            for record in data_store["checkins"][day]:
+                if isinstance(record, dict) and record.get("name") == name:
+                    # Update the status to "checkin" without clearing the remark.
+                    record["status"] = "checkin"
+                    print(f"Record for {name} on day {day} toggled to checkin status")
+                    save_data()
+                    emit("message", {"info": f"Record for {name} on day {day} toggled to checkin status"}, broadcast=True)
+                    break
     else:
         print("Unknown action:", action)
 

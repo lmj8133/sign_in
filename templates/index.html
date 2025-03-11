@@ -46,9 +46,7 @@
       border-radius: 3px;
       margin: 2px 0;
     }
-    li:hover {
-      box-shadow: 2px 2px 5px rgba(0,0,0,0.3);
-    }
+    li:hover { box-shadow: 2px 2px 5px rgba(0,0,0,0.3); }
   </style>
   <!-- Include the Socket.IO client library -->
   <script src="https://cdn.socket.io/4.0.1/socket.io.min.js"></script>
@@ -124,18 +122,19 @@
       return `hsl(${hue}, 90%, 60%)`;
     }
     
-    // Global array to store names
+    // Global array to store names.
     let nameList = [];
     
-    // CheckinRecord class definition with a deterministic color based on the name
+    // CheckinRecord class with an optional status parameter.
     class CheckinRecord {
       static colorMapping = {};
       
-      constructor(name, day, remark = "") {
+      constructor(name, day, remark = "", status = null) {
         this.name = name;
         this.day = day;
         this.remark = remark;
-        this.status = (remark ? "remark" : "checkin");
+        // If status is provided, use it; otherwise, default based on remark.
+        this.status = status ? status : (remark ? "remark" : "checkin");
         if (CheckinRecord.colorMapping[name]) {
           this.color = CheckinRecord.colorMapping[name];
         } else {
@@ -166,7 +165,7 @@
       }
     }
     
-    // Utility function to generate a lighter version of an HSL color string
+    // Utility function to generate a lighter version of an HSL color string.
     function getLighterColor(hslString) {
       const regex = /hsl\((\d+),\s*(\d+)%\s*,\s*(\d+)%\)/;
       const result = regex.exec(hslString);
@@ -180,7 +179,7 @@
       return hslString;
     }
     
-    // Establish a connection using Socket.IO
+    // Establish a Socket.IO connection.
     const socket = io();
     socket.on("connect", () => {
       console.log("Socket.IO connection established");
@@ -189,7 +188,7 @@
       console.log("Message received:", data);
     });
     
-    // Handle initial data from the backend
+    // Handle initial data from the backend.
     socket.on("initial_data", (data) => {
       nameList = data.names || [];
       updateNameListDisplay();
@@ -203,7 +202,10 @@
           checkins[day].forEach(record => {
             let personName = typeof record === "object" ? record.name : record;
             let remark = typeof record === "object" ? record.remark : "";
-            let checkinRecord = new CheckinRecord(personName, day, remark);
+            // Use record.status if provided; otherwise, determine default.
+            let status = (typeof record === "object" && record.status) ? record.status 
+                         : (typeof record === "object" && record.remark ? "remark" : "checkin");
+            let checkinRecord = new CheckinRecord(personName, day, remark, status);
             let checkinDiv = checkinRecord.render();
             checkinDiv.addEventListener("click", function(e) {
               e.stopPropagation();
@@ -224,12 +226,12 @@
       }
     });
     
-    // Function to send updated name list to the backend
+    // Function to send updated name list to the backend.
     function sendNameListUpdate() {
       socket.emit("message", { action: "update_names", names: nameList });
     }
     
-    // Generate a simple calendar for the current month
+    // Generate a simple calendar for the current month.
     const calendar = document.getElementById("calendar");
     const today = new Date();
     const year = today.getFullYear();
@@ -255,7 +257,7 @@
     let currentToggleRecordElement = null;
     let currentDay = null;
     
-    // Update the display of the name list in the modal
+    // Update the display of the name list in the modal.
     function updateNameListDisplay() {
       const ul = document.getElementById("nameListUl");
       ul.innerHTML = "";
@@ -275,13 +277,13 @@
       });
     }
     
-    // Event listener for the Build Name List button
+    // Event listener for the Build Name List button.
     document.getElementById("buildNameListButton").addEventListener("click", function() {
       document.getElementById("nameListModal").style.display = "block";
       updateNameListDisplay();
     });
     
-    // Event listener for the Add Name button in the modal
+    // Event listener for the Add Name button in the modal.
     document.getElementById("addNameButton").addEventListener("click", function() {
       const newName = document.getElementById("newNameInput").value.trim();
       if (newName && !nameList.includes(newName)) {
@@ -295,12 +297,12 @@
       document.getElementById("newNameInput").value = "";
     });
     
-    // Close name list modal
+    // Close name list modal.
     document.getElementById("closeNameListModal").addEventListener("click", function() {
       document.getElementById("nameListModal").style.display = "none";
     });
     
-    // When a calendar cell is clicked, open the check-in modal
+    // When a calendar cell is clicked, open the check-in modal.
     document.querySelectorAll("#calendar td").forEach(td => {
       td.addEventListener("click", function(e) {
         if (e.target.classList.contains("checkin")) return;
@@ -314,7 +316,7 @@
       });
     });
     
-    // Populate the check-in dropdown with names from the global nameList
+    // Populate the check-in dropdown with names from the global nameList.
     function populateCheckinDropdown() {
       const select = document.getElementById("checkinNameSelect");
       select.innerHTML = "";
@@ -326,11 +328,12 @@
       });
     }
     
-    // Check-in modal confirm event: create a new record
+    // Check-in modal confirm event: create a new record.
     document.getElementById("confirmCheckin").addEventListener("click", function() {
       const selectedName = document.getElementById("checkinNameSelect").value;
       const remark = document.getElementById("checkinRemark").value.trim();
       if (selectedName && currentDay) {
+        // Create a new record. Its status is "remark" if remark is provided.
         let record = new CheckinRecord(selectedName, currentDay, remark);
         socket.emit("message", { action: "checkin", day: currentDay, name: selectedName, remark: remark });
         let td = document.querySelector(`#calendar td[data-day='${currentDay}']`);
@@ -339,6 +342,7 @@
         checkinsDiv.appendChild(checkinDiv);
         checkinDiv.addEventListener("click", function(e) {
           e.stopPropagation();
+          // If the record is in remark mode, open toggle modal.
           if (this.getAttribute("data-status") === "remark") {
             currentToggleRecordElement = this;
             document.getElementById("toggleStatusModal").style.display = "block";
@@ -356,14 +360,14 @@
       currentDay = null;
     });
     
-    // Check-in modal cancel event
+    // Check-in modal cancel event.
     document.getElementById("cancelCheckin").addEventListener("click", function() {
       document.getElementById("checkinModal").style.display = "none";
       document.getElementById("checkinRemark").value = "";
       currentDay = null;
     });
     
-    // Cancel modal events: close and confirm cancel
+    // Cancel modal events: close and confirm cancel.
     document.getElementById("closeCancelModal").addEventListener("click", function() {
       document.getElementById("cancelModal").style.display = "none";
     });
@@ -381,14 +385,18 @@
       document.getElementById("cancelModal").style.display = "none";
     });
     
-    // Toggle status modal events: confirm and cancel toggle
+    // Toggle status modal events: confirm and cancel toggle.
     document.getElementById("confirmToggleStatus").addEventListener("click", function() {
       if (currentToggleRecordElement) {
         const name = currentToggleRecordElement.getAttribute("data-name");
+        const day = currentToggleRecordElement.getAttribute("data-day");
         const baseColor = CheckinRecord.colorMapping[name];
+        // Update UI: set status to "checkin" without erasing the remark.
         currentToggleRecordElement.style.backgroundColor = baseColor;
         currentToggleRecordElement.style.color = "white";
         currentToggleRecordElement.setAttribute("data-status", "checkin");
+        // Emit toggle_status event to backend so stored data is updated.
+        socket.emit("message", { action: "toggle_status", day: day, name: name });
       }
       document.getElementById("toggleStatusModal").style.display = "none";
       currentToggleRecordElement = null;
