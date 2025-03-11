@@ -359,9 +359,7 @@
       updateCalendarTitle(year, month);
       // Request data for current, previous, and next months.
       socket.emit("get_month_data", { year: currentYear, month: currentMonth });
-      // Also request data for previous month.
       socket.emit("get_month_data", { year: prevYear, month: prevMonth });
-      // And request data for next month.
       socket.emit("get_month_data", { year: nextYear, month: nextMonth });
     }
     
@@ -399,11 +397,9 @@
             let remark = typeof record === "object" ? record.remark : "";
             let status = (typeof record === "object" && record.status) ? record.status 
                          : (remark ? "remark" : "checkin");
-            // Use the cell's displayed day (from .date) for display.
             let displayedDay = td.querySelector(".date").innerText;
             let checkinRecord = new CheckinRecord(personName, displayedDay, remark, status);
             let checkinDiv = checkinRecord.render();
-            // Only attach interactive events for current-month cells.
             if (td.classList.contains("current-month")) {
               checkinDiv.addEventListener("click", function(e) {
                 e.stopPropagation();
@@ -488,37 +484,12 @@
       document.getElementById("nameListModal").style.display = "none";
     });
     
-    document.querySelectorAll("#calendar td").forEach(td => {
-      td.addEventListener("click", function(e) {
-        if (!this.classList.contains("current-month")) return;
-        currentDay = this.getAttribute("data-day");
-        if (nameList.length === 0) {
-          alert("Please build the name list first.");
-          return;
-        }
-        populateCheckinDropdown();
-        document.getElementById("checkinModal").style.display = "block";
-      });
-    });
-    
-    function populateCheckinDropdown() {
-      const select = document.getElementById("checkinNameSelect");
-      select.innerHTML = "";
-      nameList.forEach(name => {
-        const option = document.createElement("option");
-        option.value = name;
-        option.text = name;
-        select.appendChild(option);
-      });
-    }
-    
     document.getElementById("confirmCheckin").addEventListener("click", function() {
       const selectedName = document.getElementById("checkinNameSelect").value;
       const remark = document.getElementById("checkinRemark").value.trim();
       if (selectedName && currentDay) {
         let td = document.querySelector(`#calendar td.current-month[data-day='${currentDay}']`);
         let checkinsDiv = td.querySelector(".checkins");
-        // Prevent duplicate check-in for the same person on this day.
         const alreadyCheckedIn = Array.from(checkinsDiv.getElementsByClassName("checkin"))
           .some(div => div.getAttribute("data-name") === selectedName);
         if (alreadyCheckedIn) {
@@ -600,6 +571,17 @@
       document.getElementById("toggleStatusModal").style.display = "none";
       currentToggleRecordElement = null;
     });
+
+    function populateCheckinDropdown() {
+      const select = document.getElementById("checkinNameSelect");
+      select.innerHTML = "";
+      nameList.forEach(name => {
+        const option = document.createElement("option");
+        option.value = name;
+        option.text = name;
+        select.appendChild(option);
+      });
+    }
   </script>
 </body>
 </html>
