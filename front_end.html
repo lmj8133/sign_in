@@ -98,6 +98,17 @@
     </div>
   </div>
 
+  <!-- Modal for toggling record status -->
+  <div id="toggleStatusModal" class="modal">
+    <div class="modal-content">
+      <p>Change record to check-in status?</p>
+      <div class="modal-buttons">
+        <button id="confirmToggleStatus">Confirm</button>
+        <button id="cancelToggleStatus">Cancel</button>
+      </div>
+    </div>
+  </div>
+
   <script>
     // Utility function to generate a lighter version of an HSL color string
     function getLighterColor(hslString) {
@@ -128,7 +139,9 @@
         this.name = name;
         this.day = day;
         this.remark = remark;
-        // Use existing color if available; otherwise, generate a new, darker base color (lightness 50%)
+        // Set status: if remark is provided, default to "remark" mode; otherwise, "checkin"
+        this.status = (remark ? "remark" : "checkin");
+        // Use existing color if available; otherwise, generate a new, darker base color (lightness 60%)
         if (CheckinRecord.colorMapping[name]) {
           this.color = CheckinRecord.colorMapping[name];
         } else {
@@ -139,21 +152,26 @@
       }
       
       // Render method returns a div element representing this check-in record.
-      // If a remark is provided, display a lighter version of the base color and show the remark.
+      // If status is "remark", use a lighter version of the base color.
+      // If status is "checkin", use the base color and white text.
       render() {
         const div = document.createElement("div");
         div.className = "checkin";
-        if (this.remark) {
+        if (this.status === "remark") {
           const lighter = getLighterColor(this.color);
           div.style.backgroundColor = lighter;
+          div.style.color = ""; // default text color
           div.innerText = `${this.name} (${this.remark})`;
-        } else {
+        } else { // checkin status
           div.style.backgroundColor = this.color;
-          div.innerText = this.name;
+          div.style.color = "white";
+          // Always show remark if available.
+          div.innerText = this.remark ? `${this.name} (${this.remark})` : this.name;
         }
         div.setAttribute("data-day", this.day);
         div.setAttribute("data-name", this.name);
         div.setAttribute("data-remark", this.remark);
+        div.setAttribute("data-status", this.status);
         return div;
       }
     }
@@ -191,8 +209,10 @@
     html += "</tr>";
     calendar.innerHTML = html;
     
-    // Function to update the display of the name list in the nameListModal,
-    // adding hover and clickable cues.
+    // Global variable to store the record element being toggled
+    let currentToggleRecordElement = null;
+    
+    // Function to update the display of the name list in the nameListModal.
     function updateNameListDisplay() {
       const ul = document.getElementById("nameListUl");
       ul.innerHTML = "";
@@ -202,7 +222,6 @@
         li.style.backgroundColor = CheckinRecord.colorMapping[name] || "#ffffff";
         li.addEventListener("click", function() {
           if (confirm("Do you want to delete " + name + " from the list?")) {
-            // Remove the name from the global list and from the color mapping.
             nameList = nameList.filter(n => n !== name);
             delete CheckinRecord.colorMapping[name];
             updateNameListDisplay();
@@ -239,7 +258,7 @@
     
     let currentDay = null; // To store the selected day for check-in
     
-    // When a calendar cell is clicked, open the check-in modal (if the name list is not empty)
+    // When a calendar cell is clicked, open the check-in modal.
     document.querySelectorAll("#calendar td").forEach(td => {
       td.addEventListener("click", function(e) {
         if (e.target.classList.contains("checkin")) return;
@@ -265,7 +284,7 @@
       });
     }
     
-    // Check-in modal confirm button event
+    // Check-in modal confirm button event: create a new record.
     document.getElementById("confirmCheckin").addEventListener("click", function() {
       const selectedName = document.getElementById("checkinNameSelect").value;
       const remark = document.getElementById("checkinRemark").value.trim();
@@ -278,14 +297,21 @@
         let checkinDiv = record.render();
         checkinsDiv.appendChild(checkinDiv);
         
-        // When the check-in record is clicked, capture its attributes and open the cancel modal.
+        // Attach event listener to the record element.
         checkinDiv.addEventListener("click", function(e) {
           e.stopPropagation();
-          const day = this.getAttribute("data-day");
-          const name = this.getAttribute("data-name");
-          document.getElementById("cancelModal").style.display = "block";
-          document.getElementById("confirmCancel").setAttribute("data-day", day);
-          document.getElementById("confirmCancel").setAttribute("data-name", name);
+          // If the record is in remark mode, open toggle modal.
+          if (this.getAttribute("data-status") === "remark") {
+            currentToggleRecordElement = this;
+            document.getElementById("toggleStatusModal").style.display = "block";
+          } else {
+            // Otherwise, open cancel modal.
+            const day = this.getAttribute("data-day");
+            const name = this.getAttribute("data-name");
+            document.getElementById("cancelModal").style.display = "block";
+            document.getElementById("confirmCancel").setAttribute("data-day", day);
+            document.getElementById("confirmCancel").setAttribute("data-name", name);
+          }
         });
       }
       document.getElementById("checkinModal").style.display = "none";
@@ -317,6 +343,25 @@
         }
       });
       document.getElementById("cancelModal").style.display = "none";
+    });
+    
+    // Toggle Status modal events: confirm and cancel toggle.
+    document.getElementById("confirmToggleStatus").addEventListener("click", function() {
+      if (currentToggleRecordElement) {
+        // Get current data from the element.
+        const name = currentToggleRecordElement.getAttribute("data-name");
+        // Update the record element's style to check-in mode.
+        const baseColor = CheckinRecord.colorMapping[name];
+        currentToggleRecordElement.style.backgroundColor = baseColor;
+        currentToggleRecordElement.style.color = "white";
+        currentToggleRecordElement.setAttribute("data-status", "checkin");
+      }
+      document.getElementById("toggleStatusModal").style.display = "none";
+      currentToggleRecordElement = null;
+    });
+    document.getElementById("cancelToggleStatus").addEventListener("click", function() {
+      document.getElementById("toggleStatusModal").style.display = "none";
+      currentToggleRecordElement = null;
     });
   </script>
 </body>
