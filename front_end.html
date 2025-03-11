@@ -6,9 +6,18 @@
   <style>
     /* Basic calendar style */
     table { width: 100%; border-collapse: collapse; }
-    td { border: 1px solid #ccc; width: 14%; height: 100px; vertical-align: top; position: relative; cursor: pointer; }
+    td { border: 1px solid #ccc; width: 14%; height: 100px; vertical-align: top; position: relative; }
     .date { position: absolute; top: 0; right: 0; padding: 2px; font-size: 12px; }
     .checkin { margin: 2px; padding: 2px; border-radius: 3px; cursor: pointer; }
+    /* Button style remains unchanged */
+    #buildNameListButton {
+      position: absolute;
+      top: 10px;
+      right: 10px;
+      padding: 8px 16px;
+      font-size: 14px;
+      cursor: pointer;
+    }
     /* Modal style */
     .modal {
       display: none;
@@ -26,26 +35,62 @@
       text-align: center;
     }
     .modal-buttons { margin-top: 10px; }
+    input { margin: 5px 0; padding: 5px; width: 80%; }
+    select { width: 85%; padding: 5px; }
   </style>
 </head>
 <body>
   <h1>Attendance Sheet</h1>
+  <!-- Button to build the name list -->
+  <button id="buildNameListButton">Build Name List</button>
+  
   <table id="calendar">
     <!-- Calendar will be generated dynamically with JavaScript -->
   </table>
 
-  <!-- Modal for cancel confirmation -->
-  <div id="modal" class="modal">
+  <!-- Modal for building the name list -->
+  <div id="nameListModal" class="modal">
     <div class="modal-content">
-      <p id="modal-text">Do you want to cancel this check-in?</p>
+      <p>Enter a name to add to the list:</p>
+      <input id="newNameInput" type="text" placeholder="Name">
+      <div class="modal-buttons">
+        <button id="addNameButton">Add Name</button>
+        <button id="closeNameListModal">Close</button>
+      </div>
+      <div id="nameListDisplay" style="margin-top:10px; text-align:left;">
+        <p>Current Names:</p>
+        <ul id="nameListUl"></ul>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal for check-in selection -->
+  <div id="checkinModal" class="modal">
+    <div class="modal-content">
+      <p>Select a name to check in for this day:</p>
+      <select id="checkinNameSelect"></select>
+      <div class="modal-buttons">
+        <button id="confirmCheckin">Check In</button>
+        <button id="cancelCheckin">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal for cancel confirmation -->
+  <div id="cancelModal" class="modal">
+    <div class="modal-content">
+      <p>Do you want to cancel this check-in?</p>
       <div class="modal-buttons">
         <button id="confirmCancel">Confirm Cancel</button>
-        <button id="closeModal">Cancel</button>
+        <button id="closeCancelModal">Cancel</button>
       </div>
     </div>
   </div>
 
   <script>
+    // Global array to store names
+    let nameList = [];
+    
     // CheckinRecord class definition to store name, color, and check-in day
     class CheckinRecord {
       // Static properties for color mapping and hue generation
@@ -56,7 +101,7 @@
       constructor(name, day) {
         this.name = name;
         this.day = day;
-        // If the name already exists, use its assigned color; otherwise, generate a new color
+        // Use existing color if available; otherwise, generate a new color
         if (CheckinRecord.colorMapping[name]) {
           this.color = CheckinRecord.colorMapping[name];
         } else {
@@ -78,17 +123,16 @@
       }
     }
     
-    // Establish a WebSocket connection (adjust the URL according to your backend)
+    // Establish a WebSocket connection (adjust URL according to your backend)
     let ws = new WebSocket("ws://localhost:5000/socket.io/?EIO=4&transport=websocket");
     ws.onopen = function() {
       console.log("WebSocket connection established");
     };
     ws.onmessage = function(event) {
-      // Handle incoming messages from the server (e.g., broadcast updates)
       console.log("Message received:", event.data);
     };
-
-    // Generate a simple calendar (for the current month)
+    
+    // Generate a simple calendar for the current month
     const calendar = document.getElementById("calendar");
     const today = new Date();
     const year = today.getFullYear();
@@ -96,7 +140,7 @@
     const firstDay = new Date(year, month, 1).getDay();
     const daysInMonth = new Date(year, month + 1, 0).getDate();
     let html = "<tr>";
-    // Leading empty cells
+    // Add leading empty cells
     for (let i = 0; i < firstDay; i++) {
       html += "<td></td>";
     }
@@ -111,47 +155,114 @@
     }
     html += "</tr>";
     calendar.innerHTML = html;
-
-    // Add click event for each calendar cell: when clicked, add a check-in record
+    
+    // Function to update the display of the name list in the nameListModal
+    function updateNameListDisplay() {
+      const ul = document.getElementById("nameListUl");
+      ul.innerHTML = "";
+      nameList.forEach(name => {
+        const li = document.createElement("li");
+        li.innerText = name;
+        ul.appendChild(li);
+      });
+    }
+    
+    // Event listener for the Build Name List button
+    document.getElementById("buildNameListButton").addEventListener("click", function() {
+      document.getElementById("nameListModal").style.display = "block";
+      updateNameListDisplay();
+    });
+    
+    // Event listener for the Add Name button in the nameListModal
+    document.getElementById("addNameButton").addEventListener("click", function() {
+      const newName = document.getElementById("newNameInput").value.trim();
+      if (newName && !nameList.includes(newName)) {
+        nameList.push(newName);
+        // Initialize color mapping for the new name via CheckinRecord
+        if (!CheckinRecord.colorMapping[newName]) {
+          CheckinRecord.currentHue = (CheckinRecord.currentHue + 360 * CheckinRecord.goldenRatioConjugate) % 360;
+          CheckinRecord.colorMapping[newName] = "hsl(" + Math.floor(CheckinRecord.currentHue) + ", 70%, 80%)";
+        }
+        updateNameListDisplay();
+      }
+      document.getElementById("newNameInput").value = "";
+    });
+    
+    // Event listener to close the name list modal
+    document.getElementById("closeNameListModal").addEventListener("click", function() {
+      document.getElementById("nameListModal").style.display = "none";
+    });
+    
+    let currentDay = null; // To store the selected day for check-in
+    
+    // When a calendar cell is clicked, open the check-in modal (if the name list is not empty)
     document.querySelectorAll("#calendar td").forEach(td => {
       td.addEventListener("click", function(e) {
-        // If a check-in record is clicked, do not add a new one
+        // Do not trigger if a check-in record is clicked
         if (e.target.classList.contains("checkin")) return;
-        let day = this.getAttribute("data-day");
-        let name = prompt("Please enter the check-in name:");
-        if (name) {
-          // Create a new CheckinRecord instance for the new person
-          let record = new CheckinRecord(name, day);
-          // Send check-in message to the server
-          let msg = JSON.stringify({ action: "checkin", day: day, name: name });
-          ws.send(msg);
-          // Update the UI by rendering the record
-          let checkinsDiv = this.querySelector(".checkins");
-          let checkinDiv = record.render();
-          checkinsDiv.appendChild(checkinDiv);
-          
-          // Add click event for the check-in record: clicking will open the cancel confirmation modal
-          checkinDiv.addEventListener("click", function(e) {
-            e.stopPropagation(); // Prevent triggering the td click event
-            document.getElementById("modal").style.display = "block";
-            document.getElementById("confirmCancel").setAttribute("data-day", day);
-            document.getElementById("confirmCancel").setAttribute("data-name", name);
-          });
+        currentDay = this.getAttribute("data-day");
+        if (nameList.length === 0) {
+          alert("Please build the name list first.");
+          return;
         }
+        populateCheckinDropdown();
+        document.getElementById("checkinModal").style.display = "block";
       });
     });
-
-    // Modal button events: close and confirm cancel
-    document.getElementById("closeModal").addEventListener("click", function() {
-      document.getElementById("modal").style.display = "none";
+    
+    // Populate the check-in dropdown with names from the global nameList
+    function populateCheckinDropdown() {
+      const select = document.getElementById("checkinNameSelect");
+      select.innerHTML = "";
+      nameList.forEach(name => {
+        const option = document.createElement("option");
+        option.value = name;
+        option.text = name;
+        select.appendChild(option);
+      });
+    }
+    
+    // Check-in modal confirm button event
+    document.getElementById("confirmCheckin").addEventListener("click", function() {
+      const selectedName = document.getElementById("checkinNameSelect").value;
+      if (selectedName && currentDay) {
+        let record = new CheckinRecord(selectedName, currentDay);
+        let msg = JSON.stringify({ action: "checkin", day: currentDay, name: selectedName });
+        ws.send(msg);
+        let td = document.querySelector(`#calendar td[data-day='${currentDay}']`);
+        let checkinsDiv = td.querySelector(".checkins");
+        let checkinDiv = record.render();
+        checkinsDiv.appendChild(checkinDiv);
+        
+        // Modified event listener: capture day and name directly from the record element.
+        checkinDiv.addEventListener("click", function(e) {
+          e.stopPropagation();
+          const day = this.getAttribute("data-day");
+          const name = this.getAttribute("data-name");
+          document.getElementById("cancelModal").style.display = "block";
+          document.getElementById("confirmCancel").setAttribute("data-day", day);
+          document.getElementById("confirmCancel").setAttribute("data-name", name);
+        });
+      }
+      document.getElementById("checkinModal").style.display = "none";
+      currentDay = null;
+    });
+    
+    // Check-in modal cancel button event
+    document.getElementById("cancelCheckin").addEventListener("click", function() {
+      document.getElementById("checkinModal").style.display = "none";
+      currentDay = null;
+    });
+    
+    // Cancel modal events: close and confirm cancel
+    document.getElementById("closeCancelModal").addEventListener("click", function() {
+      document.getElementById("cancelModal").style.display = "none";
     });
     document.getElementById("confirmCancel").addEventListener("click", function() {
       let day = this.getAttribute("data-day");
       let name = this.getAttribute("data-name");
-      // Send cancel check-in message to the server
       let msg = JSON.stringify({ action: "cancel", day: day, name: name });
       ws.send(msg);
-      // Remove the check-in record from the UI
       let td = document.querySelector(`#calendar td[data-day='${day}']`);
       let checkinDivs = td.querySelectorAll(".checkin");
       checkinDivs.forEach(div => {
@@ -159,7 +270,7 @@
           td.querySelector(".checkins").removeChild(div);
         }
       });
-      document.getElementById("modal").style.display = "none";
+      document.getElementById("cancelModal").style.display = "none";
     });
   </script>
 </body>
