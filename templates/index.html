@@ -201,11 +201,11 @@
   </div>
   
   <script>
-    // Deterministic function to compute a color from a name string.
+    // Use djb2 algorithm to produce a better hash (especially for Chinese names)
     function getColorFromName(name) {
-      let hash = 0;
+      let hash = 5381;
       for (let i = 0; i < name.length; i++) {
-        hash = name.charCodeAt(i) + ((hash << 5) - hash);
+        hash = ((hash << 5) + hash) + name.charCodeAt(i); // hash * 33 + char
       }
       let hue = Math.abs(hash) % 360;
       return `hsl(${hue}, 90%, 60%)`;
@@ -219,6 +219,7 @@
         this.name = name;
         this.day = day;
         this.remark = remark;
+        // If a status is provided, use it; otherwise, default to "remark" if remark exists, else "checkin".
         this.status = status ? status : (remark ? "remark" : "checkin");
         if (CheckinRecord.colorMapping[name]) {
           this.color = CheckinRecord.colorMapping[name];
@@ -308,7 +309,7 @@
       socket.emit("message", { action: "update_names", names: nameList });
     }
     
-    // Generate a calendar for March 2025.
+    // Generate calendar for March 2025.
     const targetYear = 2025;
     const targetMonth = 2; // March (0-indexed)
     const firstDay = new Date(targetYear, targetMonth, 1).getDay();
@@ -401,10 +402,20 @@
       const selectedName = document.getElementById("checkinNameSelect").value;
       const remark = document.getElementById("checkinRemark").value.trim();
       if (selectedName && currentDay) {
-        let record = new CheckinRecord(selectedName, currentDay, remark);
-        socket.emit("message", { action: "checkin", day: currentDay, name: selectedName, remark: remark });
+        // Check if the person has already checked in today.
         let td = document.querySelector(`#calendar td[data-day='${currentDay}']`);
         let checkinsDiv = td.querySelector(".checkins");
+        const alreadyCheckedIn = Array.from(checkinsDiv.getElementsByClassName("checkin"))
+          .some(div => div.getAttribute("data-name") === selectedName);
+        if (alreadyCheckedIn) {
+          alert("This person has already checked in for today.");
+          document.getElementById("checkinModal").style.display = "none";
+          document.getElementById("checkinRemark").value = "";
+          currentDay = null;
+          return;
+        }
+        let record = new CheckinRecord(selectedName, currentDay, remark);
+        socket.emit("message", { action: "checkin", day: currentDay, name: selectedName, remark: remark });
         let checkinDiv = record.render();
         checkinsDiv.appendChild(checkinDiv);
         checkinDiv.addEventListener("click", function(e) {
