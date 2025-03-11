@@ -59,7 +59,7 @@
       padding: 5px;
       border: 1px solid #e0e0e0;
     }
-    /* Gray out cells not in the current month */
+    /* Cells not in the current month are grayed out */
     td.prev-month, td.next-month {
       background-color: #e0e0e0;
       color: #999;
@@ -357,7 +357,12 @@
       document.getElementById("calendar").innerHTML = calendarHTML;
       updateCalendarCellEvents();
       updateCalendarTitle(year, month);
+      // Request data for current, previous, and next months.
       socket.emit("get_month_data", { year: currentYear, month: currentMonth });
+      // Also request data for previous month.
+      socket.emit("get_month_data", { year: prevYear, month: prevMonth });
+      // And request data for next month.
+      socket.emit("get_month_data", { year: nextYear, month: nextMonth });
     }
     
     // Update the calendar title.
@@ -382,7 +387,7 @@
       });
     }
     
-    // Load check-ins for all cells (using their data-date attribute).
+    // Load check-ins for all cells using their data-date attribute.
     function loadCheckinsForMonth(year, month) {
       document.querySelectorAll("#calendar td[data-date]").forEach(td => {
         let dateKey = td.getAttribute("data-date");
