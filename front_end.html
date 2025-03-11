@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Attendance Sheet</title>
+  <style>
+    /* Basic calendar style */
+    table { width: 100%; border-collapse: collapse; }
+    td { border: 1px solid #ccc; width: 14%; height: 100px; vertical-align: top; position: relative; cursor: pointer; }
+    .date { position: absolute; top: 0; right: 0; padding: 2px; font-size: 12px; }
+    .checkin { background-color: #a0e0a0; margin: 2px; padding: 2px; border-radius: 3px; cursor: pointer; }
+    /* Modal style */
+    .modal {
+      display: none; 
+      position: fixed;
+      left: 0; top: 0;
+      width: 100%; height: 100%;
+      background-color: rgba(0,0,0,0.5);
+    }
+    .modal-content {
+      background-color: #fff;
+      margin: 15% auto;
+      padding: 20px;
+      width: 300px;
+      border-radius: 5px;
+      text-align: center;
+    }
+    .modal-buttons { margin-top: 10px; }
+  </style>
+</head>
+<body>
+  <h1>Attendance Sheet</h1>
+  <table id="calendar">
+    <!-- Calendar will be generated dynamically with JavaScript -->
+  </table>
+
+  <!-- Modal for cancel confirmation -->
+  <div id="modal" class="modal">
+    <div class="modal-content">
+      <p id="modal-text">Do you want to cancel this check-in?</p>
+      <div class="modal-buttons">
+        <button id="confirmCancel">Confirm Cancel</button>
+        <button id="closeModal">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // Establish a WebSocket connection (adjust the URL according to your backend)
+    let ws = new WebSocket("ws://localhost:5000/socket.io/?EIO=4&transport=websocket");
+    ws.onopen = function() {
+      console.log("WebSocket connection established");
+    };
+    ws.onmessage = function(event) {
+      // Handle incoming messages from the server (e.g., broadcast updates)
+      console.log("Message received:", event.data);
+    };
+
+    // Generate a simple calendar (for the current month)
+    const calendar = document.getElementById("calendar");
+    const today = new Date();
+    const year = today.getFullYear();
+    const month = today.getMonth();
+    const firstDay = new Date(year, month, 1).getDay(); 
+    const daysInMonth = new Date(year, month + 1, 0).getDate();
+    let html = "<tr>";
+    // Leading empty cells
+    for(let i = 0; i < firstDay; i++){
+      html += "<td></td>";
+    }
+    for(let day = 1; day <= daysInMonth; day++){
+      if((firstDay + day - 1) % 7 === 0 && day > 1){
+        html += "</tr><tr>";
+      }
+      html += `<td data-day="${day}">
+                <div class="date">${day}</div>
+                <div class="checkins"></div>
+              </td>`;
+    }
+    html += "</tr>";
+    calendar.innerHTML = html;
+
+    // Add click event for each calendar cell: when clicked, add a check-in
+    document.querySelectorAll("#calendar td").forEach(td => {
+      td.addEventListener("click", function(e) {
+        // If a check-in record is clicked, do not add a new one
+        if(e.target.classList.contains("checkin")) return;
+        let day = this.getAttribute("data-day");
+        let name = prompt("Please enter the check-in name:");
+        if(name){
+          // Send check-in message to the server
+          let msg = JSON.stringify({action:"checkin", day: day, name: name});
+          ws.send(msg);
+          // Update the UI
+          let checkinsDiv = this.querySelector(".checkins");
+          let checkinDiv = document.createElement("div");
+          checkinDiv.className = "checkin";
+          checkinDiv.innerText = name;
+          checkinDiv.setAttribute("data-day", day);
+          checkinDiv.setAttribute("data-name", name);
+          checkinsDiv.appendChild(checkinDiv);
+
+          // Add click event for the check-in record: clicking will open the cancel confirmation modal
+          checkinDiv.addEventListener("click", function(e) {
+            e.stopPropagation(); // Prevent triggering the td click event
+            document.getElementById("modal").style.display = "block";
+            document.getElementById("confirmCancel").setAttribute("data-day", day);
+            document.getElementById("confirmCancel").setAttribute("data-name", name);
+          });
+        }
+      });
+    });
+
+    // Modal button events: close and confirm cancel
+    document.getElementById("closeModal").addEventListener("click", function(){
+      document.getElementById("modal").style.display = "none";
+    });
+    document.getElementById("confirmCancel").addEventListener("click", function(){
+      let day = this.getAttribute("data-day");
+      let name = this.getAttribute("data-name");
+      // Send cancel check-in message to the server
+      let msg = JSON.stringify({action:"cancel", day: day, name: name});
+      ws.send(msg);
+      // Remove the check-in record from the UI
+      let td = document.querySelector(`#calendar td[data-day='${day}']`);
+      let checkinDivs = td.querySelectorAll(".checkin");
+      checkinDivs.forEach(div => {
+        if(div.getAttribute("data-name") === name){
+          td.querySelector(".checkins").removeChild(div);
+        }
+      });
+      document.getElementById("modal").style.display = "none";
+    });
+  </script>
+</body>
+</html>
+
