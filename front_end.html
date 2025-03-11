@@ -8,10 +8,10 @@
     table { width: 100%; border-collapse: collapse; }
     td { border: 1px solid #ccc; width: 14%; height: 100px; vertical-align: top; position: relative; cursor: pointer; }
     .date { position: absolute; top: 0; right: 0; padding: 2px; font-size: 12px; }
-    .checkin { background-color: #a0e0a0; margin: 2px; padding: 2px; border-radius: 3px; cursor: pointer; }
+    .checkin { margin: 2px; padding: 2px; border-radius: 3px; cursor: pointer; }
     /* Modal style */
     .modal {
-      display: none; 
+      display: none;
       position: fixed;
       left: 0; top: 0;
       width: 100%; height: 100%;
@@ -46,6 +46,38 @@
   </div>
 
   <script>
+    // CheckinRecord class definition to store name, color, and check-in day
+    class CheckinRecord {
+      // Static properties for color mapping and hue generation
+      static colorMapping = {};
+      static currentHue = Math.random() * 360;
+      static goldenRatioConjugate = 0.618033988749895;
+      
+      constructor(name, day) {
+        this.name = name;
+        this.day = day;
+        // If the name already exists, use its assigned color; otherwise, generate a new color
+        if (CheckinRecord.colorMapping[name]) {
+          this.color = CheckinRecord.colorMapping[name];
+        } else {
+          CheckinRecord.currentHue = (CheckinRecord.currentHue + 360 * CheckinRecord.goldenRatioConjugate) % 360;
+          this.color = "hsl(" + Math.floor(CheckinRecord.currentHue) + ", 70%, 80%)";
+          CheckinRecord.colorMapping[name] = this.color;
+        }
+      }
+      
+      // Render method returns a div element representing this check-in record
+      render() {
+        const div = document.createElement("div");
+        div.className = "checkin";
+        div.innerText = this.name;
+        div.setAttribute("data-day", this.day);
+        div.setAttribute("data-name", this.name);
+        div.style.backgroundColor = this.color;
+        return div;
+      }
+    }
+    
     // Establish a WebSocket connection (adjust the URL according to your backend)
     let ws = new WebSocket("ws://localhost:5000/socket.io/?EIO=4&transport=websocket");
     ws.onopen = function() {
@@ -61,15 +93,15 @@
     const today = new Date();
     const year = today.getFullYear();
     const month = today.getMonth();
-    const firstDay = new Date(year, month, 1).getDay(); 
+    const firstDay = new Date(year, month, 1).getDay();
     const daysInMonth = new Date(year, month + 1, 0).getDate();
     let html = "<tr>";
     // Leading empty cells
-    for(let i = 0; i < firstDay; i++){
+    for (let i = 0; i < firstDay; i++) {
       html += "<td></td>";
     }
-    for(let day = 1; day <= daysInMonth; day++){
-      if((firstDay + day - 1) % 7 === 0 && day > 1){
+    for (let day = 1; day <= daysInMonth; day++) {
+      if ((firstDay + day - 1) % 7 === 0 && day > 1) {
         html += "</tr><tr>";
       }
       html += `<td data-day="${day}">
@@ -80,26 +112,24 @@
     html += "</tr>";
     calendar.innerHTML = html;
 
-    // Add click event for each calendar cell: when clicked, add a check-in
+    // Add click event for each calendar cell: when clicked, add a check-in record
     document.querySelectorAll("#calendar td").forEach(td => {
       td.addEventListener("click", function(e) {
         // If a check-in record is clicked, do not add a new one
-        if(e.target.classList.contains("checkin")) return;
+        if (e.target.classList.contains("checkin")) return;
         let day = this.getAttribute("data-day");
         let name = prompt("Please enter the check-in name:");
-        if(name){
+        if (name) {
+          // Create a new CheckinRecord instance for the new person
+          let record = new CheckinRecord(name, day);
           // Send check-in message to the server
-          let msg = JSON.stringify({action:"checkin", day: day, name: name});
+          let msg = JSON.stringify({ action: "checkin", day: day, name: name });
           ws.send(msg);
-          // Update the UI
+          // Update the UI by rendering the record
           let checkinsDiv = this.querySelector(".checkins");
-          let checkinDiv = document.createElement("div");
-          checkinDiv.className = "checkin";
-          checkinDiv.innerText = name;
-          checkinDiv.setAttribute("data-day", day);
-          checkinDiv.setAttribute("data-name", name);
+          let checkinDiv = record.render();
           checkinsDiv.appendChild(checkinDiv);
-
+          
           // Add click event for the check-in record: clicking will open the cancel confirmation modal
           checkinDiv.addEventListener("click", function(e) {
             e.stopPropagation(); // Prevent triggering the td click event
@@ -112,20 +142,20 @@
     });
 
     // Modal button events: close and confirm cancel
-    document.getElementById("closeModal").addEventListener("click", function(){
+    document.getElementById("closeModal").addEventListener("click", function() {
       document.getElementById("modal").style.display = "none";
     });
-    document.getElementById("confirmCancel").addEventListener("click", function(){
+    document.getElementById("confirmCancel").addEventListener("click", function() {
       let day = this.getAttribute("data-day");
       let name = this.getAttribute("data-name");
       // Send cancel check-in message to the server
-      let msg = JSON.stringify({action:"cancel", day: day, name: name});
+      let msg = JSON.stringify({ action: "cancel", day: day, name: name });
       ws.send(msg);
       // Remove the check-in record from the UI
       let td = document.querySelector(`#calendar td[data-day='${day}']`);
       let checkinDivs = td.querySelectorAll(".checkin");
       checkinDivs.forEach(div => {
-        if(div.getAttribute("data-name") === name){
+        if (div.getAttribute("data-name") === name) {
           td.querySelector(".checkins").removeChild(div);
         }
       });
