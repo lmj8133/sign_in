@@ -2,80 +2,169 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>Attendance Sheet</title>
+  <title>Attendance Sheet - March 2025</title>
+  <!-- Use Google Fonts (Roboto) for a modern look -->
+  <link href="https://fonts.googleapis.com/css2?family=Roboto&display=swap" rel="stylesheet">
   <style>
-    /* Basic calendar style */
-    table { width: 100%; border-collapse: collapse; }
-    td { border: 1px solid #ccc; width: 14%; height: 100px; vertical-align: top; position: relative; }
-    .date { position: absolute; top: 0; right: 0; padding: 2px; font-size: 12px; }
-    .checkin { margin: 2px; padding: 2px; border-radius: 3px; cursor: pointer; }
-    /* Build Name List button style (top right) */
-    #buildNameListButton {
-      position: absolute;
-      top: 10px;
-      right: 10px;
-      padding: 8px 16px;
-      font-size: 14px;
-      cursor: pointer;
+    body {
+      font-family: 'Roboto', sans-serif;
+      background-color: #f1f3f4;
+      margin: 0;
+      padding: 20px;
     }
-    /* Modal style */
+    h1 {
+      text-align: center;
+      color: #202124;
+      margin-bottom: 20px;
+    }
+    /* Build Name List button style (fixed top-right) */
+    #buildNameListButton {
+      position: fixed;
+      top: 20px;
+      right: 20px;
+      background-color: #1a73e8;
+      color: white;
+      border: none;
+      border-radius: 4px;
+      padding: 10px 16px;
+      cursor: pointer;
+      box-shadow: 0 1px 2px rgba(0,0,0,0.2);
+      z-index: 1001;
+    }
+    #buildNameListButton:hover {
+      background-color: #1558b0;
+    }
+    /* Calendar table styling */
+    table {
+      width: 100%;
+      max-width: 900px;
+      margin: 80px auto;
+      background: white;
+      border-collapse: collapse;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+      border-radius: 4px;
+      overflow: hidden;
+    }
+    th {
+      background-color: #1a73e8;
+      color: white;
+      padding: 10px;
+      font-size: 14px;
+    }
+    td {
+      width: 14.28%;
+      height: 100px;
+      vertical-align: top;
+      position: relative;
+      padding: 5px;
+      border: 1px solid #e0e0e0;
+    }
+    .date {
+      position: absolute;
+      top: 5px;
+      right: 5px;
+      font-size: 12px;
+      color: #5f6368;
+    }
+    .checkins {
+      margin-top: 25px;
+      overflow-y: auto;
+      max-height: 70px;
+    }
+    .checkin {
+      margin: 2px 0;
+      padding: 2px 4px;
+      border-radius: 3px;
+      cursor: pointer;
+      font-size: 12px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    /* Modal styling */
     .modal {
       display: none;
       position: fixed;
+      z-index: 1000;
       left: 0;
       top: 0;
       width: 100%;
       height: 100%;
-      background-color: rgba(0,0,0,0.5);
+      background: rgba(60,64,67,0.3);
     }
     .modal-content {
-      background-color: #fff;
+      background: white;
+      width: 320px;
       margin: 15% auto;
       padding: 20px;
-      width: 300px;
-      border-radius: 5px;
+      border-radius: 8px;
       text-align: center;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.2);
     }
-    .modal-buttons { margin-top: 10px; }
-    input, select { margin: 5px 0; padding: 5px; width: 80%; }
-    ul { list-style: none; padding-left: 0; }
-    li {
-      padding: 3px 0;
+    .modal-buttons button {
+      padding: 8px 12px;
+      margin: 10px 5px 0 5px;
+      border: none;
+      border-radius: 4px;
       cursor: pointer;
-      transition: background-color 0.3s ease, box-shadow 0.3s ease;
-      border-radius: 3px;
-      margin: 2px 0;
+      font-size: 14px;
     }
-    li:hover { box-shadow: 2px 2px 5px rgba(0,0,0,0.3); }
+    .modal-buttons button:hover {
+      opacity: 0.9;
+    }
+    input, select {
+      width: 100%;
+      padding: 8px;
+      margin-top: 10px;
+      border: 1px solid #dadce0;
+      border-radius: 4px;
+      font-size: 14px;
+    }
+    ul {
+      list-style: none;
+      padding: 0;
+      margin-top: 10px;
+      text-align: left;
+    }
+    ul li {
+      padding: 8px;
+      margin: 4px 0;
+      background: #f8f9fa;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 14px;
+    }
+    ul li:hover {
+      background: #e8eaed;
+    }
   </style>
   <!-- Include the Socket.IO client library -->
   <script src="https://cdn.socket.io/4.0.1/socket.io.min.js"></script>
 </head>
 <body>
-  <h1>Attendance Sheet</h1>
-  <!-- Button to build the name list -->
+  <h1>Attendance Sheet - March 2025</h1>
   <button id="buildNameListButton">Build Name List</button>
   
   <table id="calendar">
-    <!-- Calendar will be generated dynamically with JavaScript -->
+    <!-- Calendar will be generated dynamically -->
   </table>
-
+  
   <!-- Modal for building the name list -->
   <div id="nameListModal" class="modal">
     <div class="modal-content">
       <p>Enter a name to add to the list:</p>
       <input id="newNameInput" type="text" placeholder="Name">
       <div class="modal-buttons">
-        <button id="addNameButton">Add Name</button>
-        <button id="closeNameListModal">Close</button>
+        <button id="addNameButton" style="background:#34a853; color:white;">Add Name</button>
+        <button id="closeNameListModal" style="background:#ea4335; color:white;">Close</button>
       </div>
-      <div id="nameListDisplay" style="margin-top:10px; text-align:left;">
+      <div id="nameListDisplay" style="margin-top:10px;">
         <p>Current Names (click to delete):</p>
         <ul id="nameListUl"></ul>
       </div>
     </div>
   </div>
-
+  
   <!-- Modal for check-in selection -->
   <div id="checkinModal" class="modal">
     <div class="modal-content">
@@ -83,34 +172,34 @@
       <select id="checkinNameSelect"></select>
       <input id="checkinRemark" type="text" placeholder="Remark (optional)">
       <div class="modal-buttons">
-        <button id="confirmCheckin">Check In</button>
-        <button id="cancelCheckin">Cancel</button>
+        <button id="confirmCheckin" style="background:#34a853; color:white;">Check In</button>
+        <button id="cancelCheckin" style="background:#ea4335; color:white;">Cancel</button>
       </div>
     </div>
   </div>
-
+  
   <!-- Modal for cancel confirmation -->
   <div id="cancelModal" class="modal">
     <div class="modal-content">
       <p>Do you want to cancel this check-in?</p>
       <div class="modal-buttons">
-        <button id="confirmCancel">Confirm Cancel</button>
-        <button id="closeCancelModal">Cancel</button>
+        <button id="confirmCancel" style="background:#ea4335; color:white;">Confirm Cancel</button>
+        <button id="closeCancelModal" style="background:#5f6368; color:white;">Cancel</button>
       </div>
     </div>
   </div>
-
+  
   <!-- Modal for toggling record status -->
   <div id="toggleStatusModal" class="modal">
     <div class="modal-content">
       <p>Change record to check-in status?</p>
       <div class="modal-buttons">
-        <button id="confirmToggleStatus">Confirm</button>
-        <button id="cancelToggleStatus">Cancel</button>
+        <button id="confirmToggleStatus" style="background:#34a853; color:white;">Confirm</button>
+        <button id="cancelToggleStatus" style="background:#5f6368; color:white;">Cancel</button>
       </div>
     </div>
   </div>
-
+  
   <script>
     // Deterministic function to compute a color from a name string.
     function getColorFromName(name) {
@@ -122,18 +211,14 @@
       return `hsl(${hue}, 90%, 60%)`;
     }
     
-    // Global array to store names.
     let nameList = [];
     
-    // CheckinRecord class with an optional status parameter.
     class CheckinRecord {
       static colorMapping = {};
-      
       constructor(name, day, remark = "", status = null) {
         this.name = name;
         this.day = day;
         this.remark = remark;
-        // If status is provided, use it; otherwise, default based on remark.
         this.status = status ? status : (remark ? "remark" : "checkin");
         if (CheckinRecord.colorMapping[name]) {
           this.color = CheckinRecord.colorMapping[name];
@@ -143,7 +228,6 @@
           this.color = color;
         }
       }
-      
       render() {
         const div = document.createElement("div");
         div.className = "checkin";
@@ -165,7 +249,6 @@
       }
     }
     
-    // Utility function to generate a lighter version of an HSL color string.
     function getLighterColor(hslString) {
       const regex = /hsl\((\d+),\s*(\d+)%\s*,\s*(\d+)%\)/;
       const result = regex.exec(hslString);
@@ -179,7 +262,6 @@
       return hslString;
     }
     
-    // Establish a Socket.IO connection.
     const socket = io();
     socket.on("connect", () => {
       console.log("Socket.IO connection established");
@@ -187,12 +269,9 @@
     socket.on("message", (data) => {
       console.log("Message received:", data);
     });
-    
-    // Handle initial data from the backend.
     socket.on("initial_data", (data) => {
       nameList = data.names || [];
       updateNameListDisplay();
-      
       const checkins = data.checkins || {};
       for (let day in checkins) {
         let td = document.querySelector(`#calendar td[data-day='${day}']`);
@@ -202,7 +281,6 @@
           checkins[day].forEach(record => {
             let personName = typeof record === "object" ? record.name : record;
             let remark = typeof record === "object" ? record.remark : "";
-            // Use record.status if provided; otherwise, determine default.
             let status = (typeof record === "object" && record.status) ? record.status 
                          : (typeof record === "object" && record.remark ? "remark" : "checkin");
             let checkinRecord = new CheckinRecord(personName, day, remark, status);
@@ -226,38 +304,34 @@
       }
     });
     
-    // Function to send updated name list to the backend.
     function sendNameListUpdate() {
       socket.emit("message", { action: "update_names", names: nameList });
     }
     
-    // Generate a simple calendar for the current month.
-    const calendar = document.getElementById("calendar");
-    const today = new Date();
-    const year = today.getFullYear();
-    const month = today.getMonth();
-    const firstDay = new Date(year, month, 1).getDay();
-    const daysInMonth = new Date(year, month + 1, 0).getDate();
-    let html = "<tr>";
+    // Generate a calendar for March 2025.
+    const targetYear = 2025;
+    const targetMonth = 2; // March (0-indexed)
+    const firstDay = new Date(targetYear, targetMonth, 1).getDay();
+    const daysInMonth = new Date(targetYear, targetMonth + 1, 0).getDate();
+    let calendarHTML = "<tr><th>Sun</th><th>Mon</th><th>Tue</th><th>Wed</th><th>Thu</th><th>Fri</th><th>Sat</th></tr><tr>";
     for (let i = 0; i < firstDay; i++) {
-      html += "<td></td>";
+      calendarHTML += "<td></td>";
     }
     for (let day = 1; day <= daysInMonth; day++) {
       if ((firstDay + day - 1) % 7 === 0 && day > 1) {
-        html += "</tr><tr>";
+        calendarHTML += "</tr><tr>";
       }
-      html += `<td data-day="${day}">
+      calendarHTML += `<td data-day="${day}">
                 <div class="date">${day}</div>
                 <div class="checkins"></div>
               </td>`;
     }
-    html += "</tr>";
-    calendar.innerHTML = html;
+    calendarHTML += "</tr>";
+    document.getElementById("calendar").innerHTML = calendarHTML;
     
     let currentToggleRecordElement = null;
     let currentDay = null;
     
-    // Update the display of the name list in the modal.
     function updateNameListDisplay() {
       const ul = document.getElementById("nameListUl");
       ul.innerHTML = "";
@@ -277,13 +351,11 @@
       });
     }
     
-    // Event listener for the Build Name List button.
     document.getElementById("buildNameListButton").addEventListener("click", function() {
       document.getElementById("nameListModal").style.display = "block";
       updateNameListDisplay();
     });
     
-    // Event listener for the Add Name button in the modal.
     document.getElementById("addNameButton").addEventListener("click", function() {
       const newName = document.getElementById("newNameInput").value.trim();
       if (newName && !nameList.includes(newName)) {
@@ -297,15 +369,13 @@
       document.getElementById("newNameInput").value = "";
     });
     
-    // Close name list modal.
     document.getElementById("closeNameListModal").addEventListener("click", function() {
       document.getElementById("nameListModal").style.display = "none";
     });
     
-    // When a calendar cell is clicked, open the check-in modal.
     document.querySelectorAll("#calendar td").forEach(td => {
       td.addEventListener("click", function(e) {
-        if (e.target.classList.contains("checkin")) return;
+        if (!this.hasAttribute("data-day")) return;
         currentDay = this.getAttribute("data-day");
         if (nameList.length === 0) {
           alert("Please build the name list first.");
@@ -316,7 +386,6 @@
       });
     });
     
-    // Populate the check-in dropdown with names from the global nameList.
     function populateCheckinDropdown() {
       const select = document.getElementById("checkinNameSelect");
       select.innerHTML = "";
@@ -328,12 +397,10 @@
       });
     }
     
-    // Check-in modal confirm event: create a new record.
     document.getElementById("confirmCheckin").addEventListener("click", function() {
       const selectedName = document.getElementById("checkinNameSelect").value;
       const remark = document.getElementById("checkinRemark").value.trim();
       if (selectedName && currentDay) {
-        // Create a new record. Its status is "remark" if remark is provided.
         let record = new CheckinRecord(selectedName, currentDay, remark);
         socket.emit("message", { action: "checkin", day: currentDay, name: selectedName, remark: remark });
         let td = document.querySelector(`#calendar td[data-day='${currentDay}']`);
@@ -342,7 +409,6 @@
         checkinsDiv.appendChild(checkinDiv);
         checkinDiv.addEventListener("click", function(e) {
           e.stopPropagation();
-          // If the record is in remark mode, open toggle modal.
           if (this.getAttribute("data-status") === "remark") {
             currentToggleRecordElement = this;
             document.getElementById("toggleStatusModal").style.display = "block";
@@ -360,17 +426,16 @@
       currentDay = null;
     });
     
-    // Check-in modal cancel event.
     document.getElementById("cancelCheckin").addEventListener("click", function() {
       document.getElementById("checkinModal").style.display = "none";
       document.getElementById("checkinRemark").value = "";
       currentDay = null;
     });
     
-    // Cancel modal events: close and confirm cancel.
     document.getElementById("closeCancelModal").addEventListener("click", function() {
       document.getElementById("cancelModal").style.display = "none";
     });
+    
     document.getElementById("confirmCancel").addEventListener("click", function() {
       let day = this.getAttribute("data-day");
       let name = this.getAttribute("data-name");
@@ -385,17 +450,14 @@
       document.getElementById("cancelModal").style.display = "none";
     });
     
-    // Toggle status modal events: confirm and cancel toggle.
     document.getElementById("confirmToggleStatus").addEventListener("click", function() {
       if (currentToggleRecordElement) {
         const name = currentToggleRecordElement.getAttribute("data-name");
         const day = currentToggleRecordElement.getAttribute("data-day");
         const baseColor = CheckinRecord.colorMapping[name];
-        // Update UI: set status to "checkin" without erasing the remark.
         currentToggleRecordElement.style.backgroundColor = baseColor;
         currentToggleRecordElement.style.color = "white";
         currentToggleRecordElement.setAttribute("data-status", "checkin");
-        // Emit toggle_status event to backend so stored data is updated.
         socket.emit("message", { action: "toggle_status", day: day, name: name });
       }
       document.getElementById("toggleStatusModal").style.display = "none";
