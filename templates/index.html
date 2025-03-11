@@ -206,7 +206,7 @@
   </div>
   
   <script>
-    // Use djb2 algorithm for a robust hash (good for Chinese names)
+    // Use djb2 algorithm for a robust hash function (good for Chinese names)
     function getColorFromName(name) {
       let hash = 5381;
       for (let i = 0; i < name.length; i++) {
@@ -304,7 +304,7 @@
       return `${year}-${String(month+1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
     }
     
-    // Generate a 6x7 calendar.
+    // Generate a fixed 6×7 calendar.
     function generateCalendar(year, month) {
       const firstDay = new Date(year, month, 1).getDay();
       const daysInMonth = new Date(year, month + 1, 0).getDate();
@@ -314,7 +314,11 @@
       if (prevMonth < 0) { prevMonth = 11; prevYear--; }
       const daysInPrevMonth = new Date(prevYear, prevMonth + 1, 0).getDate();
       
-      let totalCells = 42; // 6 rows * 7 cols
+      // Next month info.
+      let nextMonth = month + 1, nextYear = year;
+      if (nextMonth > 11) { nextMonth = 0; nextYear++; }
+      
+      let totalCells = 42; // Always 6 rows.
       let calendarHTML = "<tr><th>Sun</th><th>Mon</th><th>Tue</th><th>Wed</th><th>Thu</th><th>Fri</th><th>Sat</th></tr>";
       
       for (let cell = 0; cell < totalCells; cell++) {
@@ -322,24 +326,28 @@
         let cellContent = "";
         let cellClass = "";
         let dataDay = "";
+        let dateKey = "";
         if (cell < firstDay) {
           // Previous month.
           let dateNum = daysInPrevMonth - (firstDay - cell - 1);
           cellContent = dateNum;
           cellClass = "prev-month";
+          dateKey = formatDateKey(prevYear, prevMonth, dateNum);
         } else if (cell < firstDay + daysInMonth) {
           // Current month.
           let dateNum = cell - firstDay + 1;
           cellContent = dateNum;
           cellClass = "current-month";
           dataDay = dateNum;
+          dateKey = formatDateKey(year, month, dateNum);
         } else {
           // Next month.
           let dateNum = cell - (firstDay + daysInMonth) + 1;
           cellContent = dateNum;
           cellClass = "next-month";
+          dateKey = formatDateKey(nextYear, nextMonth, dateNum);
         }
-        calendarHTML += `<td class="${cellClass}" data-day="${dataDay}">
+        calendarHTML += `<td class="${cellClass}" data-date="${dateKey}" data-day="${dataDay}">
                            <div class="date">${cellContent}</div>
                            <div class="checkins"></div>
                          </td>`;
@@ -359,7 +367,7 @@
       document.getElementById("calendarTitle").innerText = `Attendance Sheet - ${monthNames[month]} ${year}`;
     }
     
-    // Attach click events to current-month cells.
+    // Attach click events only to current-month cells.
     function updateCalendarCellEvents() {
       document.querySelectorAll("#calendar td.current-month").forEach(td => {
         td.addEventListener("click", function(e) {
@@ -374,23 +382,24 @@
       });
     }
     
-    // Load check-ins for current month cells.
+    // Load check-ins for all cells (using their data-date attribute).
     function loadCheckinsForMonth(year, month) {
-      const daysInMonth = new Date(year, month + 1, 0).getDate();
-      for (let day = 1; day <= daysInMonth; day++) {
-        let dateKey = formatDateKey(year, month, day);
-        let td = document.querySelector(`#calendar td.current-month[data-day='${day}']`);
-        if (td) {
-          let checkinsDiv = td.querySelector(".checkins");
-          checkinsDiv.innerHTML = "";
-          if (checkinData[dateKey]) {
-            checkinData[dateKey].forEach(record => {
-              let personName = typeof record === "object" ? record.name : record;
-              let remark = typeof record === "object" ? record.remark : "";
-              let status = (typeof record === "object" && record.status) ? record.status 
-                           : (typeof record === "object" && record.remark ? "remark" : "checkin");
-              let checkinRecord = new CheckinRecord(personName, day, remark, status);
-              let checkinDiv = checkinRecord.render();
+      document.querySelectorAll("#calendar td[data-date]").forEach(td => {
+        let dateKey = td.getAttribute("data-date");
+        let checkinsDiv = td.querySelector(".checkins");
+        checkinsDiv.innerHTML = "";
+        if (checkinData[dateKey]) {
+          checkinData[dateKey].forEach(record => {
+            let personName = typeof record === "object" ? record.name : record;
+            let remark = typeof record === "object" ? record.remark : "";
+            let status = (typeof record === "object" && record.status) ? record.status 
+                         : (remark ? "remark" : "checkin");
+            // Use the cell's displayed day (from .date) for display.
+            let displayedDay = td.querySelector(".date").innerText;
+            let checkinRecord = new CheckinRecord(personName, displayedDay, remark, status);
+            let checkinDiv = checkinRecord.render();
+            // Only attach interactive events for current-month cells.
+            if (td.classList.contains("current-month")) {
               checkinDiv.addEventListener("click", function(e) {
                 e.stopPropagation();
                 if (this.getAttribute("data-status") === "remark") {
@@ -404,11 +413,11 @@
                   document.getElementById("confirmCancel").setAttribute("data-name", name);
                 }
               });
-              checkinsDiv.appendChild(checkinDiv);
-            });
-          }
+            }
+            checkinsDiv.appendChild(checkinDiv);
+          });
         }
-      }
+      });
     }
     
     // Initialize calendar with the current month on page load.
@@ -504,7 +513,7 @@
       if (selectedName && currentDay) {
         let td = document.querySelector(`#calendar td.current-month[data-day='${currentDay}']`);
         let checkinsDiv = td.querySelector(".checkins");
-        // Prevent duplicate check-in.
+        // Prevent duplicate check-in for the same person on this day.
         const alreadyCheckedIn = Array.from(checkinsDiv.getElementsByClassName("checkin"))
           .some(div => div.getAttribute("data-name") === selectedName);
         if (alreadyCheckedIn) {
