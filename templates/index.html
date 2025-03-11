@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>Attendance Sheet - March 2025</title>
+  <title>Attendance Sheet - Calendar</title>
   <!-- Use Google Fonts (Roboto) for a modern look -->
   <link href="https://fonts.googleapis.com/css2?family=Roboto&display=swap" rel="stylesheet">
   <style>
@@ -59,12 +59,18 @@
       padding: 5px;
       border: 1px solid #e0e0e0;
     }
+    /* Gray out cells not in the current month */
+    td.prev-month, td.next-month {
+      background-color: #e0e0e0;
+      color: #999;
+      pointer-events: none;
+    }
     .date {
       position: absolute;
       top: 5px;
       right: 5px;
       font-size: 12px;
-      color: #5f6368;
+      color: inherit;
     }
     .checkins {
       margin-top: 25px;
@@ -138,11 +144,10 @@
       background: #e8eaed;
     }
   </style>
-  <!-- Include the Socket.IO client library -->
   <script src="https://cdn.socket.io/4.0.1/socket.io.min.js"></script>
 </head>
 <body>
-  <h1>Attendance Sheet - March 2025</h1>
+  <h1 id="calendarTitle">Attendance Sheet - Calendar</h1>
   <button id="buildNameListButton">Build Name List</button>
   
   <table id="calendar">
@@ -201,17 +206,18 @@
   </div>
   
   <script>
-    // Use djb2 algorithm to produce a better hash (especially for Chinese names)
+    // Use djb2 algorithm for a robust hash (good for Chinese names)
     function getColorFromName(name) {
       let hash = 5381;
       for (let i = 0; i < name.length; i++) {
-        hash = ((hash << 5) + hash) + name.charCodeAt(i); // hash * 33 + char
+        hash = ((hash << 5) + hash) + name.charCodeAt(i);
       }
       let hue = Math.abs(hash) % 360;
       return `hsl(${hue}, 90%, 60%)`;
     }
     
     let nameList = [];
+    let checkinData = {};
     
     class CheckinRecord {
       static colorMapping = {};
@@ -219,7 +225,6 @@
         this.name = name;
         this.day = day;
         this.remark = remark;
-        // If a status is provided, use it; otherwise, default to "remark" if remark exists, else "checkin".
         this.status = status ? status : (remark ? "remark" : "checkin");
         if (CheckinRecord.colorMapping[name]) {
           this.color = CheckinRecord.colorMapping[name];
@@ -272,66 +277,161 @@
     });
     socket.on("initial_data", (data) => {
       nameList = data.names || [];
+      checkinData = data.checkins || {};
       updateNameListDisplay();
-      const checkins = data.checkins || {};
-      for (let day in checkins) {
-        let td = document.querySelector(`#calendar td[data-day='${day}']`);
-        if (td) {
-          let checkinsDiv = td.querySelector(".checkins");
-          checkinsDiv.innerHTML = "";
-          checkins[day].forEach(record => {
-            let personName = typeof record === "object" ? record.name : record;
-            let remark = typeof record === "object" ? record.remark : "";
-            let status = (typeof record === "object" && record.status) ? record.status 
-                         : (typeof record === "object" && record.remark ? "remark" : "checkin");
-            let checkinRecord = new CheckinRecord(personName, day, remark, status);
-            let checkinDiv = checkinRecord.render();
-            checkinDiv.addEventListener("click", function(e) {
-              e.stopPropagation();
-              if (this.getAttribute("data-status") === "remark") {
-                currentToggleRecordElement = this;
-                document.getElementById("toggleStatusModal").style.display = "block";
-              } else {
-                const day = this.getAttribute("data-day");
-                const name = this.getAttribute("data-name");
-                document.getElementById("cancelModal").style.display = "block";
-                document.getElementById("confirmCancel").setAttribute("data-day", day);
-                document.getElementById("confirmCancel").setAttribute("data-name", name);
-              }
-            });
-            checkinsDiv.appendChild(checkinDiv);
-          });
-        }
+      loadCheckinsForMonth(currentYear, currentMonth);
+    });
+    socket.on("month_data", (data) => {
+      // Merge received month data into global checkinData.
+      for (let key in data) {
+        checkinData[key] = data[key];
       }
+      loadCheckinsForMonth(currentYear, currentMonth);
     });
     
     function sendNameListUpdate() {
       socket.emit("message", { action: "update_names", names: nameList });
     }
     
-    // Generate calendar for March 2025.
-    const targetYear = 2025;
-    const targetMonth = 2; // March (0-indexed)
-    const firstDay = new Date(targetYear, targetMonth, 1).getDay();
-    const daysInMonth = new Date(targetYear, targetMonth + 1, 0).getDate();
-    let calendarHTML = "<tr><th>Sun</th><th>Mon</th><th>Tue</th><th>Wed</th><th>Thu</th><th>Fri</th><th>Sat</th></tr><tr>";
-    for (let i = 0; i < firstDay; i++) {
-      calendarHTML += "<td></td>";
-    }
-    for (let day = 1; day <= daysInMonth; day++) {
-      if ((firstDay + day - 1) % 7 === 0 && day > 1) {
-        calendarHTML += "</tr><tr>";
-      }
-      calendarHTML += `<td data-day="${day}">
-                <div class="date">${day}</div>
-                <div class="checkins"></div>
-              </td>`;
-    }
-    calendarHTML += "</tr>";
-    document.getElementById("calendar").innerHTML = calendarHTML;
-    
-    let currentToggleRecordElement = null;
+    // Global variables for current calendar month/year.
+    let currentYear = (new Date()).getFullYear();
+    let currentMonth = (new Date()).getMonth(); // 0-indexed
     let currentDay = null;
+    let currentToggleRecordElement = null;
+    
+    // Helper function to format a date key as "YYYY-MM-DD"
+    function formatDateKey(year, month, day) {
+      return `${year}-${String(month+1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+    }
+    
+    // Generate a 6x7 calendar.
+    function generateCalendar(year, month) {
+      const firstDay = new Date(year, month, 1).getDay();
+      const daysInMonth = new Date(year, month + 1, 0).getDate();
+      
+      // Previous month info.
+      let prevMonth = month - 1, prevYear = year;
+      if (prevMonth < 0) { prevMonth = 11; prevYear--; }
+      const daysInPrevMonth = new Date(prevYear, prevMonth + 1, 0).getDate();
+      
+      let totalCells = 42; // 6 rows * 7 cols
+      let calendarHTML = "<tr><th>Sun</th><th>Mon</th><th>Tue</th><th>Wed</th><th>Thu</th><th>Fri</th><th>Sat</th></tr>";
+      
+      for (let cell = 0; cell < totalCells; cell++) {
+        if (cell % 7 === 0) { calendarHTML += "<tr>"; }
+        let cellContent = "";
+        let cellClass = "";
+        let dataDay = "";
+        if (cell < firstDay) {
+          // Previous month.
+          let dateNum = daysInPrevMonth - (firstDay - cell - 1);
+          cellContent = dateNum;
+          cellClass = "prev-month";
+        } else if (cell < firstDay + daysInMonth) {
+          // Current month.
+          let dateNum = cell - firstDay + 1;
+          cellContent = dateNum;
+          cellClass = "current-month";
+          dataDay = dateNum;
+        } else {
+          // Next month.
+          let dateNum = cell - (firstDay + daysInMonth) + 1;
+          cellContent = dateNum;
+          cellClass = "next-month";
+        }
+        calendarHTML += `<td class="${cellClass}" data-day="${dataDay}">
+                           <div class="date">${cellContent}</div>
+                           <div class="checkins"></div>
+                         </td>`;
+        if (cell % 7 === 6) { calendarHTML += "</tr>"; }
+      }
+      
+      document.getElementById("calendar").innerHTML = calendarHTML;
+      updateCalendarCellEvents();
+      updateCalendarTitle(year, month);
+      socket.emit("get_month_data", { year: currentYear, month: currentMonth });
+    }
+    
+    // Update the calendar title.
+    function updateCalendarTitle(year, month) {
+      const monthNames = ["January", "February", "March", "April", "May", "June",
+                          "July", "August", "September", "October", "November", "December"];
+      document.getElementById("calendarTitle").innerText = `Attendance Sheet - ${monthNames[month]} ${year}`;
+    }
+    
+    // Attach click events to current-month cells.
+    function updateCalendarCellEvents() {
+      document.querySelectorAll("#calendar td.current-month").forEach(td => {
+        td.addEventListener("click", function(e) {
+          currentDay = this.getAttribute("data-day");
+          if (nameList.length === 0) {
+            alert("Please build the name list first.");
+            return;
+          }
+          populateCheckinDropdown();
+          document.getElementById("checkinModal").style.display = "block";
+        });
+      });
+    }
+    
+    // Load check-ins for current month cells.
+    function loadCheckinsForMonth(year, month) {
+      const daysInMonth = new Date(year, month + 1, 0).getDate();
+      for (let day = 1; day <= daysInMonth; day++) {
+        let dateKey = formatDateKey(year, month, day);
+        let td = document.querySelector(`#calendar td.current-month[data-day='${day}']`);
+        if (td) {
+          let checkinsDiv = td.querySelector(".checkins");
+          checkinsDiv.innerHTML = "";
+          if (checkinData[dateKey]) {
+            checkinData[dateKey].forEach(record => {
+              let personName = typeof record === "object" ? record.name : record;
+              let remark = typeof record === "object" ? record.remark : "";
+              let status = (typeof record === "object" && record.status) ? record.status 
+                           : (typeof record === "object" && record.remark ? "remark" : "checkin");
+              let checkinRecord = new CheckinRecord(personName, day, remark, status);
+              let checkinDiv = checkinRecord.render();
+              checkinDiv.addEventListener("click", function(e) {
+                e.stopPropagation();
+                if (this.getAttribute("data-status") === "remark") {
+                  currentToggleRecordElement = this;
+                  document.getElementById("toggleStatusModal").style.display = "block";
+                } else {
+                  const day = this.getAttribute("data-day");
+                  const name = this.getAttribute("data-name");
+                  document.getElementById("cancelModal").style.display = "block";
+                  document.getElementById("confirmCancel").setAttribute("data-day", day);
+                  document.getElementById("confirmCancel").setAttribute("data-name", name);
+                }
+              });
+              checkinsDiv.appendChild(checkinDiv);
+            });
+          }
+        }
+      }
+    }
+    
+    // Initialize calendar with the current month on page load.
+    generateCalendar(currentYear, currentMonth);
+    
+    // Mouse wheel navigation.
+    window.addEventListener("wheel", function(e) {
+      if (e.deltaY < 0) { // Previous month.
+        currentMonth--;
+        if (currentMonth < 0) {
+          currentMonth = 11;
+          currentYear--;
+        }
+        generateCalendar(currentYear, currentMonth);
+      } else if (e.deltaY > 0) { // Next month.
+        currentMonth++;
+        if (currentMonth > 11) {
+          currentMonth = 0;
+          currentYear++;
+        }
+        generateCalendar(currentYear, currentMonth);
+      }
+    });
     
     function updateNameListDisplay() {
       const ul = document.getElementById("nameListUl");
@@ -376,7 +476,7 @@
     
     document.querySelectorAll("#calendar td").forEach(td => {
       td.addEventListener("click", function(e) {
-        if (!this.hasAttribute("data-day")) return;
+        if (!this.classList.contains("current-month")) return;
         currentDay = this.getAttribute("data-day");
         if (nameList.length === 0) {
           alert("Please build the name list first.");
@@ -402,9 +502,9 @@
       const selectedName = document.getElementById("checkinNameSelect").value;
       const remark = document.getElementById("checkinRemark").value.trim();
       if (selectedName && currentDay) {
-        // Check if the person has already checked in today.
-        let td = document.querySelector(`#calendar td[data-day='${currentDay}']`);
+        let td = document.querySelector(`#calendar td.current-month[data-day='${currentDay}']`);
         let checkinsDiv = td.querySelector(".checkins");
+        // Prevent duplicate check-in.
         const alreadyCheckedIn = Array.from(checkinsDiv.getElementsByClassName("checkin"))
           .some(div => div.getAttribute("data-name") === selectedName);
         if (alreadyCheckedIn) {
@@ -415,7 +515,14 @@
           return;
         }
         let record = new CheckinRecord(selectedName, currentDay, remark);
-        socket.emit("message", { action: "checkin", day: currentDay, name: selectedName, remark: remark });
+        socket.emit("message", { 
+          action: "checkin", 
+          year: currentYear, 
+          month: currentMonth, 
+          day: currentDay, 
+          name: selectedName, 
+          remark: remark 
+        });
         let checkinDiv = record.render();
         checkinsDiv.appendChild(checkinDiv);
         checkinDiv.addEventListener("click", function(e) {
@@ -450,8 +557,8 @@
     document.getElementById("confirmCancel").addEventListener("click", function() {
       let day = this.getAttribute("data-day");
       let name = this.getAttribute("data-name");
-      socket.emit("message", { action: "cancel", day: day, name: name });
-      let td = document.querySelector(`#calendar td[data-day='${day}']`);
+      socket.emit("message", { action: "cancel", year: currentYear, month: currentMonth, day: day, name: name });
+      let td = document.querySelector(`#calendar td.current-month[data-day='${day}']`);
       let checkinDivs = td.querySelectorAll(".checkin");
       checkinDivs.forEach(div => {
         if (div.getAttribute("data-name") === name) {
@@ -469,11 +576,12 @@
         currentToggleRecordElement.style.backgroundColor = baseColor;
         currentToggleRecordElement.style.color = "white";
         currentToggleRecordElement.setAttribute("data-status", "checkin");
-        socket.emit("message", { action: "toggle_status", day: day, name: name });
+        socket.emit("message", { action: "toggle_status", year: currentYear, month: currentMonth, day: day, name: name });
       }
       document.getElementById("toggleStatusModal").style.display = "none";
       currentToggleRecordElement = null;
     });
+    
     document.getElementById("cancelToggleStatus").addEventListener("click", function() {
       document.getElementById("toggleStatusModal").style.display = "none";
       currentToggleRecordElement = null;
