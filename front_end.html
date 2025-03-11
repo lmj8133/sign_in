@@ -35,8 +35,7 @@
       text-align: center;
     }
     .modal-buttons { margin-top: 10px; }
-    input { margin: 5px 0; padding: 5px; width: 80%; }
-    select { width: 85%; padding: 5px; }
+    input, select { margin: 5px 0; padding: 5px; width: 80%; }
     ul { list-style: none; padding-left: 0; }
     li {
       padding: 3px 0;
@@ -80,6 +79,7 @@
     <div class="modal-content">
       <p>Select a name to check in for this day:</p>
       <select id="checkinNameSelect"></select>
+      <input id="checkinRemark" type="text" placeholder="Remark (optional)">
       <div class="modal-buttons">
         <button id="confirmCheckin">Check In</button>
         <button id="cancelCheckin">Cancel</button>
@@ -99,37 +99,61 @@
   </div>
 
   <script>
+    // Utility function to generate a lighter version of an HSL color string
+    function getLighterColor(hslString) {
+      const regex = /hsl\((\d+),\s*(\d+)%\s*,\s*(\d+)%\)/;
+      const result = regex.exec(hslString);
+      if (result) {
+        const hue = result[1];
+        const saturation = result[2];
+        let lightness = parseInt(result[3]);
+        // Increase lightness by 20 (capped at 90)
+        let newLightness = Math.min(lightness + 20, 90);
+        return `hsl(${hue}, ${saturation}%, ${newLightness}%)`;
+      }
+      return hslString;
+    }
+    
     // Global array to store names
     let nameList = [];
     
-    // CheckinRecord class definition to store name, color, and check-in day
+    // CheckinRecord class definition to store name, color, check-in day, and optional remark
     class CheckinRecord {
       // Static properties for color mapping and hue generation
       static colorMapping = {};
       static currentHue = Math.random() * 360;
       static goldenRatioConjugate = 0.618033988749895;
       
-      constructor(name, day) {
+      constructor(name, day, remark = "") {
         this.name = name;
         this.day = day;
-        // Use existing color if available; otherwise, generate a new color
+        this.remark = remark;
+        // Use existing color if available; otherwise, generate a new, darker base color (lightness 50%)
         if (CheckinRecord.colorMapping[name]) {
           this.color = CheckinRecord.colorMapping[name];
         } else {
           CheckinRecord.currentHue = (CheckinRecord.currentHue + 360 * CheckinRecord.goldenRatioConjugate) % 360;
-          this.color = "hsl(" + Math.floor(CheckinRecord.currentHue) + ", 70%, 80%)";
+          this.color = "hsl(" + Math.floor(CheckinRecord.currentHue) + ", 90%, 60%)";
           CheckinRecord.colorMapping[name] = this.color;
         }
       }
       
-      // Render method returns a div element representing this check-in record
+      // Render method returns a div element representing this check-in record.
+      // If a remark is provided, display a lighter version of the base color and show the remark.
       render() {
         const div = document.createElement("div");
         div.className = "checkin";
-        div.innerText = this.name;
+        if (this.remark) {
+          const lighter = getLighterColor(this.color);
+          div.style.backgroundColor = lighter;
+          div.innerText = `${this.name} (${this.remark})`;
+        } else {
+          div.style.backgroundColor = this.color;
+          div.innerText = this.name;
+        }
         div.setAttribute("data-day", this.day);
         div.setAttribute("data-name", this.name);
-        div.style.backgroundColor = this.color;
+        div.setAttribute("data-remark", this.remark);
         return div;
       }
     }
@@ -168,20 +192,18 @@
     calendar.innerHTML = html;
     
     // Function to update the display of the name list in the nameListModal,
-    // and add click events to each list item for deletion.
+    // adding hover and clickable cues.
     function updateNameListDisplay() {
       const ul = document.getElementById("nameListUl");
       ul.innerHTML = "";
       nameList.forEach(name => {
         const li = document.createElement("li");
         li.innerText = name;
-        // Set the background color from CheckinRecord's colorMapping.
         li.style.backgroundColor = CheckinRecord.colorMapping[name] || "#ffffff";
         li.addEventListener("click", function() {
           if (confirm("Do you want to delete " + name + " from the list?")) {
-            // Remove the name from the global list
+            // Remove the name from the global list and from the color mapping.
             nameList = nameList.filter(n => n !== name);
-            // Also remove from the color mapping
             delete CheckinRecord.colorMapping[name];
             updateNameListDisplay();
           }
@@ -201,10 +223,9 @@
       const newName = document.getElementById("newNameInput").value.trim();
       if (newName && !nameList.includes(newName)) {
         nameList.push(newName);
-        // Initialize color mapping for the new name via CheckinRecord
         if (!CheckinRecord.colorMapping[newName]) {
           CheckinRecord.currentHue = (CheckinRecord.currentHue + 360 * CheckinRecord.goldenRatioConjugate) % 360;
-          CheckinRecord.colorMapping[newName] = "hsl(" + Math.floor(CheckinRecord.currentHue) + ", 70%, 80%)";
+          CheckinRecord.colorMapping[newName] = "hsl(" + Math.floor(CheckinRecord.currentHue) + ", 70%, 50%)";
         }
         updateNameListDisplay();
       }
@@ -221,7 +242,6 @@
     // When a calendar cell is clicked, open the check-in modal (if the name list is not empty)
     document.querySelectorAll("#calendar td").forEach(td => {
       td.addEventListener("click", function(e) {
-        // Do not trigger if a check-in record is clicked
         if (e.target.classList.contains("checkin")) return;
         currentDay = this.getAttribute("data-day");
         if (nameList.length === 0) {
@@ -248,16 +268,17 @@
     // Check-in modal confirm button event
     document.getElementById("confirmCheckin").addEventListener("click", function() {
       const selectedName = document.getElementById("checkinNameSelect").value;
+      const remark = document.getElementById("checkinRemark").value.trim();
       if (selectedName && currentDay) {
-        let record = new CheckinRecord(selectedName, currentDay);
-        let msg = JSON.stringify({ action: "checkin", day: currentDay, name: selectedName });
+        let record = new CheckinRecord(selectedName, currentDay, remark);
+        let msg = JSON.stringify({ action: "checkin", day: currentDay, name: selectedName, remark: remark });
         ws.send(msg);
         let td = document.querySelector(`#calendar td[data-day='${currentDay}']`);
         let checkinsDiv = td.querySelector(".checkins");
         let checkinDiv = record.render();
         checkinsDiv.appendChild(checkinDiv);
         
-        // Capture day and name from the rendered element's attributes.
+        // When the check-in record is clicked, capture its attributes and open the cancel modal.
         checkinDiv.addEventListener("click", function(e) {
           e.stopPropagation();
           const day = this.getAttribute("data-day");
@@ -268,12 +289,14 @@
         });
       }
       document.getElementById("checkinModal").style.display = "none";
+      document.getElementById("checkinRemark").value = "";
       currentDay = null;
     });
     
     // Check-in modal cancel button event
     document.getElementById("cancelCheckin").addEventListener("click", function() {
       document.getElementById("checkinModal").style.display = "none";
+      document.getElementById("checkinRemark").value = "";
       currentDay = null;
     });
     
