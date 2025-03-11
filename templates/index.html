@@ -122,7 +122,6 @@
         const hue = result[1];
         const saturation = result[2];
         let lightness = parseInt(result[3]);
-        // Increase lightness by 20 (capped at 90)
         let newLightness = Math.min(lightness + 20, 90);
         return `hsl(${hue}, ${saturation}%, ${newLightness}%)`;
       }
@@ -132,9 +131,8 @@
     // Global array to store names
     let nameList = [];
     
-    // CheckinRecord class definition to store name, color, check-in day, and optional remark
+    // CheckinRecord class definition to create check-in record elements
     class CheckinRecord {
-      // Static properties for color mapping and hue generation
       static colorMapping = {};
       static currentHue = Math.random() * 360;
       static goldenRatioConjugate = 0.618033988749895;
@@ -143,9 +141,7 @@
         this.name = name;
         this.day = day;
         this.remark = remark;
-        // Set status: if remark is provided, default to "remark" mode; otherwise, "checkin"
         this.status = (remark ? "remark" : "checkin");
-        // Use existing color if available; otherwise, generate a new, darker base color (lightness 60%)
         if (CheckinRecord.colorMapping[name]) {
           this.color = CheckinRecord.colorMapping[name];
         } else {
@@ -155,14 +151,13 @@
         }
       }
       
-      // Render method returns a div element representing this check-in record.
       render() {
         const div = document.createElement("div");
         div.className = "checkin";
         if (this.status === "remark") {
           const lighter = getLighterColor(this.color);
           div.style.backgroundColor = lighter;
-          div.style.color = ""; // default text color
+          div.style.color = "";
           div.innerText = `${this.name} (${this.remark})`;
         } else {
           div.style.backgroundColor = this.color;
@@ -186,6 +181,49 @@
       console.log("Message received:", data);
     });
     
+    // Handle initial data from the backend
+    socket.on("initial_data", (data) => {
+      // Set the name list and update display
+      nameList = data.names || [];
+      updateNameListDisplay();
+      
+      // Update calendar check-ins from the stored check-in records
+      const checkins = data.checkins || {};
+      for (let day in checkins) {
+        let td = document.querySelector(`#calendar td[data-day='${day}']`);
+        if (td) {
+          let checkinsDiv = td.querySelector(".checkins");
+          checkinsDiv.innerHTML = "";
+          checkins[day].forEach(record => {
+            // If the record is a string (old format), convert it:
+            let personName = typeof record === "object" ? record.name : record;
+            let remark = typeof record === "object" ? record.remark : "";
+            let checkinRecord = new CheckinRecord(personName, day, remark);
+            let checkinDiv = checkinRecord.render();
+            checkinDiv.addEventListener("click", function(e) {
+              e.stopPropagation();
+              if (this.getAttribute("data-status") === "remark") {
+                currentToggleRecordElement = this;
+                document.getElementById("toggleStatusModal").style.display = "block";
+              } else {
+                const day = this.getAttribute("data-day");
+                const name = this.getAttribute("data-name");
+                document.getElementById("cancelModal").style.display = "block";
+                document.getElementById("confirmCancel").setAttribute("data-day", day);
+                document.getElementById("confirmCancel").setAttribute("data-name", name);
+              }
+            });
+            checkinsDiv.appendChild(checkinDiv);
+          });
+        }
+      }
+    });
+    
+    // Function to send updated name list to the backend
+    function sendNameListUpdate() {
+      socket.emit("message", { action: "update_names", names: nameList });
+    }
+    
     // Generate a simple calendar for the current month
     const calendar = document.getElementById("calendar");
     const today = new Date();
@@ -194,7 +232,6 @@
     const firstDay = new Date(year, month, 1).getDay();
     const daysInMonth = new Date(year, month + 1, 0).getDate();
     let html = "<tr>";
-    // Add leading empty cells
     for (let i = 0; i < firstDay; i++) {
       html += "<td></td>";
     }
@@ -210,11 +247,10 @@
     html += "</tr>";
     calendar.innerHTML = html;
     
-    // Global variable to store the record element being toggled
     let currentToggleRecordElement = null;
-    let currentDay = null; // To store the selected day for check-in
+    let currentDay = null;
     
-    // Function to update the display of the name list in the modal
+    // Update the display of the name list in the modal
     function updateNameListDisplay() {
       const ul = document.getElementById("nameListUl");
       ul.innerHTML = "";
@@ -227,6 +263,7 @@
             nameList = nameList.filter(n => n !== name);
             delete CheckinRecord.colorMapping[name];
             updateNameListDisplay();
+            sendNameListUpdate();
           }
         });
         ul.appendChild(li);
@@ -249,11 +286,12 @@
           CheckinRecord.colorMapping[newName] = "hsl(" + Math.floor(CheckinRecord.currentHue) + ", 70%, 50%)";
         }
         updateNameListDisplay();
+        sendNameListUpdate();
       }
       document.getElementById("newNameInput").value = "";
     });
     
-    // Event listener to close the name list modal
+    // Close name list modal
     document.getElementById("closeNameListModal").addEventListener("click", function() {
       document.getElementById("nameListModal").style.display = "none";
     });
@@ -284,20 +322,17 @@
       });
     }
     
-    // Check-in modal confirm button event: create a new record
+    // Check-in modal confirm event: create a new record
     document.getElementById("confirmCheckin").addEventListener("click", function() {
       const selectedName = document.getElementById("checkinNameSelect").value;
       const remark = document.getElementById("checkinRemark").value.trim();
       if (selectedName && currentDay) {
         let record = new CheckinRecord(selectedName, currentDay, remark);
-        // Send a checkin event to the backend
         socket.emit("message", { action: "checkin", day: currentDay, name: selectedName, remark: remark });
         let td = document.querySelector(`#calendar td[data-day='${currentDay}']`);
         let checkinsDiv = td.querySelector(".checkins");
         let checkinDiv = record.render();
         checkinsDiv.appendChild(checkinDiv);
-        
-        // Attach event listener to the record element
         checkinDiv.addEventListener("click", function(e) {
           e.stopPropagation();
           if (this.getAttribute("data-status") === "remark") {
@@ -317,7 +352,7 @@
       currentDay = null;
     });
     
-    // Check-in modal cancel button event
+    // Check-in modal cancel event
     document.getElementById("cancelCheckin").addEventListener("click", function() {
       document.getElementById("checkinModal").style.display = "none";
       document.getElementById("checkinRemark").value = "";
@@ -331,7 +366,6 @@
     document.getElementById("confirmCancel").addEventListener("click", function() {
       let day = this.getAttribute("data-day");
       let name = this.getAttribute("data-name");
-      // Send a cancel event to the backend
       socket.emit("message", { action: "cancel", day: day, name: name });
       let td = document.querySelector(`#calendar td[data-day='${day}']`);
       let checkinDivs = td.querySelectorAll(".checkin");
@@ -343,7 +377,7 @@
       document.getElementById("cancelModal").style.display = "none";
     });
     
-    // Toggle Status modal events: confirm and cancel toggle
+    // Toggle status modal events: confirm and cancel toggle
     document.getElementById("confirmToggleStatus").addEventListener("click", function() {
       if (currentToggleRecordElement) {
         const name = currentToggleRecordElement.getAttribute("data-name");
