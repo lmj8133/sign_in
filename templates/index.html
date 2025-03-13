@@ -178,35 +178,28 @@
       <input id="checkinRemark" type="text" placeholder="Remark (optional)">
       <div class="modal-buttons">
         <button id="confirmCheckin" style="background:#34a853; color:white;">Check In</button>
+        <button id="remarkButton" style="background:#1a73e8; color:white;">Remark</button>
         <button id="cancelCheckin" style="background:#ea4335; color:white;">Cancel</button>
       </div>
     </div>
   </div>
   
-  <!-- Modal for cancel confirmation -->
-  <div id="cancelModal" class="modal">
+  <!-- Modal for editing a check-in record (update remark, toggle status, cancel record) -->
+  <div id="editRecordModal" class="modal">
     <div class="modal-content">
-      <p>Do you want to cancel this check-in?</p>
+      <p>Edit Check-in Record</p>
+      <input id="editRemarkInput" type="text" placeholder="Remark (optional)">
       <div class="modal-buttons">
-        <button id="confirmCancel" style="background:#ea4335; color:white;">Confirm Cancel</button>
-        <button id="closeCancelModal" style="background:#5f6368; color:white;">Cancel</button>
-      </div>
-    </div>
-  </div>
-  
-  <!-- Modal for toggling record status -->
-  <div id="toggleStatusModal" class="modal">
-    <div class="modal-content">
-      <p>Change record to check-in status?</p>
-      <div class="modal-buttons">
-        <button id="confirmToggleStatus" style="background:#34a853; color:white;">Confirm</button>
-        <button id="cancelToggleStatus" style="background:#5f6368; color:white;">Cancel</button>
+        <button id="updateRemarkButton" style="background:#34a853; color:white;">Update Remark</button>
+        <button id="toggleStatusButton" style="background:#1a73e8; color:white;">Toggle Status</button>
+        <button id="cancelRecordButton" style="background:#ea4335; color:white;">Cancel Record</button>
+        <button id="closeEditRecordModal" style="background:#5f6368; color:white;">Close</button>
       </div>
     </div>
   </div>
   
   <script>
-    // Use djb2 algorithm for a robust hash function (good for Chinese names)
+    // djb2 algorithm: compute color from a given name
     function getColorFromName(name) {
       let hash = 5381;
       for (let i = 0; i < name.length; i++) {
@@ -215,46 +208,7 @@
       let hue = Math.abs(hash) % 360;
       return `hsl(${hue}, 90%, 60%)`;
     }
-    
-    let nameList = [];
-    let checkinData = {};
-    
-    class CheckinRecord {
-      static colorMapping = {};
-      constructor(name, day, remark = "", status = null) {
-        this.name = name;
-        this.day = day;
-        this.remark = remark;
-        this.status = status ? status : (remark ? "remark" : "checkin");
-        if (CheckinRecord.colorMapping[name]) {
-          this.color = CheckinRecord.colorMapping[name];
-        } else {
-          let color = getColorFromName(name);
-          CheckinRecord.colorMapping[name] = color;
-          this.color = color;
-        }
-      }
-      render() {
-        const div = document.createElement("div");
-        div.className = "checkin";
-        if (this.status === "remark") {
-          const lighter = getLighterColor(this.color);
-          div.style.backgroundColor = lighter;
-          div.style.color = "";
-          div.innerText = `${this.name} (${this.remark})`;
-        } else {
-          div.style.backgroundColor = this.color;
-          div.style.color = "white";
-          div.innerText = this.remark ? `${this.name} (${this.remark})` : this.name;
-        }
-        div.setAttribute("data-day", this.day);
-        div.setAttribute("data-name", this.name);
-        div.setAttribute("data-remark", this.remark);
-        div.setAttribute("data-status", this.status);
-        return div;
-      }
-    }
-    
+    // Get a lighter version of an HSL color string
     function getLighterColor(hslString) {
       const regex = /hsl\((\d+),\s*(\d+)%\s*,\s*(\d+)%\)/;
       const result = regex.exec(hslString);
@@ -268,6 +222,49 @@
       return hslString;
     }
     
+    let nameList = [];
+    let checkinData = {};
+    let currentToggleRecordElement = null;
+    
+    // CheckinRecord class: stores name, day, remark, and status ("checkin" or "remark")
+    class CheckinRecord {
+      static colorMapping = {};
+      constructor(name, day, remark = "", status = null) {
+        this.name = name;
+        this.day = day;
+        this.remark = remark;
+        // Use provided status; if not provided, default based on remark presence (default is "checkin")
+        this.status = status ? status : (remark ? "remark" : "checkin");
+        if (CheckinRecord.colorMapping[name]) {
+          this.color = CheckinRecord.colorMapping[name];
+        } else {
+          let color = getColorFromName(name);
+          CheckinRecord.colorMapping[name] = color;
+          this.color = color;
+        }
+      }
+      render() {
+        const div = document.createElement("div");
+        div.className = "checkin";
+        // Set background color based on status
+        if (this.status === "remark") {
+          const lighter = getLighterColor(this.color);
+          div.style.backgroundColor = lighter;
+          div.style.color = "";
+        } else {
+          div.style.backgroundColor = this.color;
+          div.style.color = "white";
+        }
+        div.innerText = this.remark ? `${this.name} (${this.remark})` : this.name;
+        div.setAttribute("data-day", this.day);
+        div.setAttribute("data-name", this.name);
+        div.setAttribute("data-remark", this.remark);
+        div.setAttribute("data-status", this.status);
+        return div;
+      }
+    }
+    
+    // Connect to backend using socket.io (assumes backend handles these messages)
     const socket = io();
     socket.on("connect", () => {
       console.log("Socket.IO connection established");
@@ -282,7 +279,6 @@
       loadCheckinsForMonth(currentYear, currentMonth);
     });
     socket.on("month_data", (data) => {
-      // Merge received month data into global checkinData.
       for (let key in data) {
         checkinData[key] = data[key];
       }
@@ -293,32 +289,31 @@
       socket.emit("message", { action: "update_names", names: nameList });
     }
     
-    // Global variables for current calendar month/year.
+    // Global variables for current year, month, and day
     let currentYear = (new Date()).getFullYear();
     let currentMonth = (new Date()).getMonth(); // 0-indexed
     let currentDay = null;
-    let currentToggleRecordElement = null;
     
-    // Helper function to format a date key as "YYYY-MM-DD"
+    // Format a date key as "YYYY-MM-DD"
     function formatDateKey(year, month, day) {
       return `${year}-${String(month+1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
     }
     
-    // Generate a fixed 6×7 calendar.
+    // Generate a fixed 6x7 calendar
     function generateCalendar(year, month) {
       const firstDay = new Date(year, month, 1).getDay();
       const daysInMonth = new Date(year, month + 1, 0).getDate();
       
-      // Previous month info.
+      // Previous month info
       let prevMonth = month - 1, prevYear = year;
       if (prevMonth < 0) { prevMonth = 11; prevYear--; }
       const daysInPrevMonth = new Date(prevYear, prevMonth + 1, 0).getDate();
       
-      // Next month info.
+      // Next month info
       let nextMonth = month + 1, nextYear = year;
       if (nextMonth > 11) { nextMonth = 0; nextYear++; }
       
-      let totalCells = 42; // Always 6 rows.
+      let totalCells = 42; // Always 6 rows
       let calendarHTML = "<tr><th>Sun</th><th>Mon</th><th>Tue</th><th>Wed</th><th>Thu</th><th>Fri</th><th>Sat</th></tr>";
       
       for (let cell = 0; cell < totalCells; cell++) {
@@ -328,20 +323,20 @@
         let dataDay = "";
         let dateKey = "";
         if (cell < firstDay) {
-          // Previous month.
+          // Previous month
           let dateNum = daysInPrevMonth - (firstDay - cell - 1);
           cellContent = dateNum;
           cellClass = "prev-month";
           dateKey = formatDateKey(prevYear, prevMonth, dateNum);
         } else if (cell < firstDay + daysInMonth) {
-          // Current month.
+          // Current month
           let dateNum = cell - firstDay + 1;
           cellContent = dateNum;
           cellClass = "current-month";
           dataDay = dateNum;
           dateKey = formatDateKey(year, month, dateNum);
         } else {
-          // Next month.
+          // Next month
           let dateNum = cell - (firstDay + daysInMonth) + 1;
           cellContent = dateNum;
           cellClass = "next-month";
@@ -357,20 +352,19 @@
       document.getElementById("calendar").innerHTML = calendarHTML;
       updateCalendarCellEvents();
       updateCalendarTitle(year, month);
-      // Request data for current, previous, and next months.
+      // Request month data for current, previous, and next months
       socket.emit("get_month_data", { year: currentYear, month: currentMonth });
       socket.emit("get_month_data", { year: prevYear, month: prevMonth });
       socket.emit("get_month_data", { year: nextYear, month: nextMonth });
     }
     
-    // Update the calendar title.
     function updateCalendarTitle(year, month) {
       const monthNames = ["January", "February", "March", "April", "May", "June",
                           "July", "August", "September", "October", "November", "December"];
       document.getElementById("calendarTitle").innerText = `Attendance Sheet - ${monthNames[month]} ${year}`;
     }
     
-    // Attach click events only to current-month cells.
+    // Attach click events to current month cells to open the check-in modal
     function updateCalendarCellEvents() {
       document.querySelectorAll("#calendar td.current-month").forEach(td => {
         td.addEventListener("click", function(e) {
@@ -385,7 +379,7 @@
       });
     }
     
-    // Load check-ins for all cells using their data-date attribute.
+    // Load check-in records for each date cell using the data-date attribute
     function loadCheckinsForMonth(year, month) {
       document.querySelectorAll("#calendar td[data-date]").forEach(td => {
         let dateKey = td.getAttribute("data-date");
@@ -400,40 +394,32 @@
             let displayedDay = td.querySelector(".date").innerText;
             let checkinRecord = new CheckinRecord(personName, displayedDay, remark, status);
             let checkinDiv = checkinRecord.render();
-            if (td.classList.contains("current-month")) {
-              checkinDiv.addEventListener("click", function(e) {
-                e.stopPropagation();
-                if (this.getAttribute("data-status") === "remark") {
-                  currentToggleRecordElement = this;
-                  document.getElementById("toggleStatusModal").style.display = "block";
-                } else {
-                  const day = this.getAttribute("data-day");
-                  const name = this.getAttribute("data-name");
-                  document.getElementById("cancelModal").style.display = "block";
-                  document.getElementById("confirmCancel").setAttribute("data-day", day);
-                  document.getElementById("confirmCancel").setAttribute("data-name", name);
-                }
-              });
-            }
+            // When a record is clicked, open the edit record modal
+            checkinDiv.addEventListener("click", function(e) {
+              e.stopPropagation();
+              currentToggleRecordElement = this;
+              document.getElementById("editRemarkInput").value = this.getAttribute("data-remark");
+              document.getElementById("editRecordModal").style.display = "block";
+            });
             checkinsDiv.appendChild(checkinDiv);
           });
         }
       });
     }
     
-    // Initialize calendar with the current month on page load.
+    // Initialize calendar for the current month on page load
     generateCalendar(currentYear, currentMonth);
     
-    // Mouse wheel navigation.
+    // Mouse wheel navigation to switch months
     window.addEventListener("wheel", function(e) {
-      if (e.deltaY < 0) { // Previous month.
+      if (e.deltaY < 0) { // Previous month
         currentMonth--;
         if (currentMonth < 0) {
           currentMonth = 11;
           currentYear--;
         }
         generateCalendar(currentYear, currentMonth);
-      } else if (e.deltaY > 0) { // Next month.
+      } else if (e.deltaY > 0) { // Next month
         currentMonth++;
         if (currentMonth > 11) {
           currentMonth = 0;
@@ -443,6 +429,7 @@
       }
     });
     
+    // Update the name list display
     function updateNameListDisplay() {
       const ul = document.getElementById("nameListUl");
       ul.innerHTML = "";
@@ -484,6 +471,18 @@
       document.getElementById("nameListModal").style.display = "none";
     });
     
+    function populateCheckinDropdown() {
+      const select = document.getElementById("checkinNameSelect");
+      select.innerHTML = "";
+      nameList.forEach(name => {
+        const option = document.createElement("option");
+        option.value = name;
+        option.text = name;
+        select.appendChild(option);
+      });
+    }
+    
+    // Confirm check-in: create a record with initial status "checkin" and bind click event to open edit modal
     document.getElementById("confirmCheckin").addEventListener("click", function() {
       const selectedName = document.getElementById("checkinNameSelect").value;
       const remark = document.getElementById("checkinRemark").value.trim();
@@ -499,7 +498,7 @@
           currentDay = null;
           return;
         }
-        let record = new CheckinRecord(selectedName, currentDay, remark);
+        let record = new CheckinRecord(selectedName, currentDay, remark, "checkin");
         socket.emit("message", { 
           action: "checkin", 
           year: currentYear, 
@@ -512,16 +511,48 @@
         checkinsDiv.appendChild(checkinDiv);
         checkinDiv.addEventListener("click", function(e) {
           e.stopPropagation();
-          if (this.getAttribute("data-status") === "remark") {
-            currentToggleRecordElement = this;
-            document.getElementById("toggleStatusModal").style.display = "block";
-          } else {
-            const day = this.getAttribute("data-day");
-            const name = this.getAttribute("data-name");
-            document.getElementById("cancelModal").style.display = "block";
-            document.getElementById("confirmCancel").setAttribute("data-day", day);
-            document.getElementById("confirmCancel").setAttribute("data-name", name);
-          }
+          currentToggleRecordElement = this;
+          document.getElementById("editRemarkInput").value = this.getAttribute("data-remark");
+          document.getElementById("editRecordModal").style.display = "block";
+        });
+      }
+      document.getElementById("checkinModal").style.display = "none";
+      document.getElementById("checkinRemark").value = "";
+      currentDay = null;
+    });
+    
+    // Remark button event: create a record with status "remark" and send data to backend
+    document.getElementById("remarkButton").addEventListener("click", function() {
+      const selectedName = document.getElementById("checkinNameSelect").value;
+      const remark = document.getElementById("checkinRemark").value.trim();
+      if (selectedName && currentDay) {
+        let td = document.querySelector(`#calendar td.current-month[data-day='${currentDay}']`);
+        let checkinsDiv = td.querySelector(".checkins");
+        const alreadyCheckedIn = Array.from(checkinsDiv.getElementsByClassName("checkin"))
+          .some(div => div.getAttribute("data-name") === selectedName);
+        if (alreadyCheckedIn) {
+          alert("This person has already checked in for today.");
+          document.getElementById("checkinModal").style.display = "none";
+          document.getElementById("checkinRemark").value = "";
+          currentDay = null;
+          return;
+        }
+        let record = new CheckinRecord(selectedName, currentDay, remark, "remark");
+        socket.emit("message", { 
+          action: "remark", 
+          year: currentYear, 
+          month: currentMonth, 
+          day: currentDay, 
+          name: selectedName, 
+          remark: remark 
+        });
+        let checkinDiv = record.render();
+        checkinsDiv.appendChild(checkinDiv);
+        checkinDiv.addEventListener("click", function(e) {
+          e.stopPropagation();
+          currentToggleRecordElement = this;
+          document.getElementById("editRemarkInput").value = this.getAttribute("data-remark");
+          document.getElementById("editRecordModal").style.display = "block";
         });
       }
       document.getElementById("checkinModal").style.display = "none";
@@ -535,53 +566,84 @@
       currentDay = null;
     });
     
-    document.getElementById("closeCancelModal").addEventListener("click", function() {
-      document.getElementById("cancelModal").style.display = "none";
+    // Edit modal button events:
+    
+    // Update remark: update only the remark without changing status
+    document.getElementById("updateRemarkButton").addEventListener("click", function() {
+      if (currentToggleRecordElement) {
+        const newRemark = document.getElementById("editRemarkInput").value.trim();
+        const name = currentToggleRecordElement.getAttribute("data-name");
+        const day = currentToggleRecordElement.getAttribute("data-day");
+        currentToggleRecordElement.setAttribute("data-remark", newRemark);
+        currentToggleRecordElement.innerText = newRemark ? `${name} (${newRemark})` : name;
+        socket.emit("message", { 
+          action: "update_remark", 
+          year: currentYear, 
+          month: currentMonth, 
+          day: day, 
+          name: name, 
+          remark: newRemark 
+        });
+      }
+      document.getElementById("editRecordModal").style.display = "none";
+      currentToggleRecordElement = null;
     });
     
-    document.getElementById("confirmCancel").addEventListener("click", function() {
-      let day = this.getAttribute("data-day");
-      let name = this.getAttribute("data-name");
-      socket.emit("message", { action: "cancel", year: currentYear, month: currentMonth, day: day, name: name });
-      let td = document.querySelector(`#calendar td.current-month[data-day='${day}']`);
-      let checkinDivs = td.querySelectorAll(".checkin");
-      checkinDivs.forEach(div => {
-        if (div.getAttribute("data-name") === name) {
-          td.querySelector(".checkins").removeChild(div);
-        }
-      });
-      document.getElementById("cancelModal").style.display = "none";
-    });
-    
-    document.getElementById("confirmToggleStatus").addEventListener("click", function() {
+    // Toggle status: switch between "checkin" and "remark" and inform backend
+    document.getElementById("toggleStatusButton").addEventListener("click", function() {
       if (currentToggleRecordElement) {
         const name = currentToggleRecordElement.getAttribute("data-name");
         const day = currentToggleRecordElement.getAttribute("data-day");
-        const baseColor = CheckinRecord.colorMapping[name];
-        currentToggleRecordElement.style.backgroundColor = baseColor;
-        currentToggleRecordElement.style.color = "white";
-        currentToggleRecordElement.setAttribute("data-status", "checkin");
-        socket.emit("message", { action: "toggle_status", year: currentYear, month: currentMonth, day: day, name: name });
+        let currentStatus = currentToggleRecordElement.getAttribute("data-status");
+        currentStatus = currentStatus === "checkin" ? "remark" : "checkin";
+        currentToggleRecordElement.setAttribute("data-status", currentStatus);
+        if (currentStatus === "remark") {
+          const lighter = getLighterColor(CheckinRecord.colorMapping[name]);
+          currentToggleRecordElement.style.backgroundColor = lighter;
+          currentToggleRecordElement.style.color = "";
+        } else {
+          currentToggleRecordElement.style.backgroundColor = CheckinRecord.colorMapping[name];
+          currentToggleRecordElement.style.color = "white";
+        }
+        // Send a message to the backend to inform that toggle occurred, with toggled: true
+        socket.emit("message", { 
+          action: "toggle_status", 
+          year: currentYear, 
+          month: currentMonth, 
+          day: day, 
+          name: name, 
+          status: currentStatus,
+          toggled: true
+        });
       }
-      document.getElementById("toggleStatusModal").style.display = "none";
+      document.getElementById("editRecordModal").style.display = "none";
       currentToggleRecordElement = null;
     });
     
-    document.getElementById("cancelToggleStatus").addEventListener("click", function() {
-      document.getElementById("toggleStatusModal").style.display = "none";
+    // Cancel record: remove the record and inform backend
+    document.getElementById("cancelRecordButton").addEventListener("click", function() {
+      if (currentToggleRecordElement) {
+        const day = currentToggleRecordElement.getAttribute("data-day");
+        const name = currentToggleRecordElement.getAttribute("data-name");
+        socket.emit("message", { 
+          action: "cancel", 
+          year: currentYear, 
+          month: currentMonth, 
+          day: day, 
+          name: name 
+        });
+        const td = document.querySelector(`#calendar td.current-month[data-day='${day}']`);
+        td.querySelector(".checkins").removeChild(currentToggleRecordElement);
+      }
+      document.getElementById("editRecordModal").style.display = "none";
       currentToggleRecordElement = null;
     });
-
-    function populateCheckinDropdown() {
-      const select = document.getElementById("checkinNameSelect");
-      select.innerHTML = "";
-      nameList.forEach(name => {
-        const option = document.createElement("option");
-        option.value = name;
-        option.text = name;
-        select.appendChild(option);
-      });
-    }
+    
+    document.getElementById("closeEditRecordModal").addEventListener("click", function() {
+      document.getElementById("editRecordModal").style.display = "none";
+      currentToggleRecordElement = null;
+    });
+    
   </script>
 </body>
 </html>
