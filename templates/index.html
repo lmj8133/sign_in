@@ -246,16 +246,20 @@
       render() {
         const div = document.createElement("div");
         div.className = "checkin";
-        // Set background color based on status
-        if (this.status === "remark") {
+        if (this.status === "checkin") {
+          div.style.backgroundColor = this.color;
+          div.style.color = "black";
+          // Only for checkin records, prepend an icon image
+          const iconUrl = "https://img.icons8.com/color/16/000000/checked-checkbox.png";
+          div.innerHTML = `<img src="${iconUrl}" style="vertical-align:middle; margin-right:4px;">` +
+                          (this.remark ? `${this.name} (${this.remark})` : this.name);
+        } else {
+          // For remark records, no icon is displayed.
           const lighter = getLighterColor(this.color);
           div.style.backgroundColor = lighter;
           div.style.color = "";
-        } else {
-          div.style.backgroundColor = this.color;
-          div.style.color = "white";
+          div.innerText = this.remark ? `${this.name} (${this.remark})` : this.name;
         }
-        div.innerText = this.remark ? `${this.name} (${this.remark})` : this.name;
         div.setAttribute("data-day", this.day);
         div.setAttribute("data-name", this.name);
         div.setAttribute("data-remark", this.remark);
@@ -323,20 +327,17 @@
         let dataDay = "";
         let dateKey = "";
         if (cell < firstDay) {
-          // Previous month
           let dateNum = daysInPrevMonth - (firstDay - cell - 1);
           cellContent = dateNum;
           cellClass = "prev-month";
           dateKey = formatDateKey(prevYear, prevMonth, dateNum);
         } else if (cell < firstDay + daysInMonth) {
-          // Current month
           let dateNum = cell - firstDay + 1;
           cellContent = dateNum;
           cellClass = "current-month";
           dataDay = dateNum;
           dateKey = formatDateKey(year, month, dateNum);
         } else {
-          // Next month
           let dateNum = cell - (firstDay + daysInMonth) + 1;
           cellContent = dateNum;
           cellClass = "next-month";
@@ -575,7 +576,14 @@
         const name = currentToggleRecordElement.getAttribute("data-name");
         const day = currentToggleRecordElement.getAttribute("data-day");
         currentToggleRecordElement.setAttribute("data-remark", newRemark);
-        currentToggleRecordElement.innerText = newRemark ? `${name} (${newRemark})` : name;
+        // Update displayed text; for checkin records include icon image
+        if (currentToggleRecordElement.getAttribute("data-status") === "checkin") {
+          const iconUrl = "https://img.icons8.com/color/16/000000/checked-checkbox.png";
+          currentToggleRecordElement.innerHTML = `<img src="${iconUrl}" style="vertical-align:middle; margin-right:4px;">` +
+            (newRemark ? `${name} (${newRemark})` : name);
+        } else {
+          currentToggleRecordElement.innerText = newRemark ? `${name} (${newRemark})` : name;
+        }
         socket.emit("message", { 
           action: "update_remark", 
           year: currentYear, 
@@ -597,15 +605,21 @@
         let currentStatus = currentToggleRecordElement.getAttribute("data-status");
         currentStatus = currentStatus === "checkin" ? "remark" : "checkin";
         currentToggleRecordElement.setAttribute("data-status", currentStatus);
-        if (currentStatus === "remark") {
+        if (currentStatus === "checkin") {
+          const iconUrl = "https://img.icons8.com/color/16/000000/checked-checkbox.png";
+          currentToggleRecordElement.style.backgroundColor = CheckinRecord.colorMapping[name];
+          currentToggleRecordElement.style.color = "black";
+          currentToggleRecordElement.innerHTML = `<img src="${iconUrl}" style="vertical-align:middle; margin-right:4px;">` + 
+            currentToggleRecordElement.getAttribute("data-name") + (currentToggleRecordElement.getAttribute("data-remark") ? 
+            ` (${currentToggleRecordElement.getAttribute("data-remark")})` : "");
+        } else {
           const lighter = getLighterColor(CheckinRecord.colorMapping[name]);
           currentToggleRecordElement.style.backgroundColor = lighter;
           currentToggleRecordElement.style.color = "";
-        } else {
-          currentToggleRecordElement.style.backgroundColor = CheckinRecord.colorMapping[name];
-          currentToggleRecordElement.style.color = "white";
+          currentToggleRecordElement.innerText = currentToggleRecordElement.getAttribute("data-name") + 
+            (currentToggleRecordElement.getAttribute("data-remark") ? ` (${currentToggleRecordElement.getAttribute("data-remark")})` : "");
         }
-        // Send a message to the backend to inform that toggle occurred, with toggled: true
+        // Inform backend with toggled flag
         socket.emit("message", { 
           action: "toggle_status", 
           year: currentYear, 
