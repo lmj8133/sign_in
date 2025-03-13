@@ -3,13 +3,13 @@ from flask_socketio import SocketIO, emit
 import json
 import os
 
-app = Flask(__name__)
+app = Flask(__name__, template_folder='templates')
 app.config['SECRET_KEY'] = 'secret!'
 socketio = SocketIO(app)
 
 DATA_FILE = "data.json"
 
-# Load existing data if available, otherwise initialize data_store
+# Load existing data if available, otherwise initialize the data store
 if os.path.exists(DATA_FILE):
     with open(DATA_FILE, "r", encoding="utf-8") as f:
         data_store = json.load(f)
@@ -26,14 +26,14 @@ def save_data():
 
 def get_date_key(year, month, day):
     """
-    Construct a date key in the format "YYYY-MM-DD".
-    Note: the month value from the frontend is zero-indexed.
+    Generate a date key in the format "YYYY-MM-DD".
+    The month received from the frontend is zero-indexed, so add 1.
     """
     return f"{year}-{int(month)+1:02d}-{int(day):02d}"
 
 @socketio.on('connect')
 def handle_connect():
-    # When a client connects, send the stored names and all checkins
+    # When a client connects, send all stored data
     emit("initial_data", data_store)
 
 @socketio.on('get_month_data')
@@ -41,8 +41,8 @@ def handle_get_month_data(message):
     year = message.get("year")
     month = message.get("month")
     month_prefix = f"{year}-{int(month)+1:02d}-"
-    # Filter check-ins for keys that start with month_prefix
-    month_data = { key: val for key, val in data_store["checkins"].items() if key.startswith(month_prefix) }
+    # Filter data for the specified month
+    month_data = {key: val for key, val in data_store["checkins"].items() if key.startswith(month_prefix)}
     emit("month_data", month_data)
 
 @socketio.on('message')
@@ -66,7 +66,7 @@ def handle_message(message):
         record = {"name": name, "remark": remark, "status": status}
         if date_key not in data_store["checkins"]:
             data_store["checkins"][date_key] = []
-        # Update if record exists; otherwise add new.
+        # Update the record if it exists; otherwise, add a new record
         updated = False
         for rec in data_store["checkins"][date_key]:
             if isinstance(rec, dict) and rec.get("name") == name:
@@ -104,7 +104,6 @@ def handle_message(message):
         if date_key in data_store["checkins"]:
             for record in data_store["checkins"][date_key]:
                 if isinstance(record, dict) and record.get("name") == name:
-                    # Toggle the status to "checkin" without clearing the remark.
                     record["status"] = "checkin"
                     print(f"Record for {name} on {date_key} toggled to checkin status")
                     save_data()
@@ -118,5 +117,6 @@ def index():
     return render_template('index.html')
 
 if __name__ == '__main__':
-    socketio.run(app, debug=True)
+    print("Starting Flask-SocketIO app on port 3000...")
+    socketio.run(app, host='0.0.0.0', port=3000, debug=True, use_reloader=False)
 
