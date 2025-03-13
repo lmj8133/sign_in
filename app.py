@@ -62,7 +62,9 @@ def handle_message(message):
         date_key = get_date_key(year, month, day)
         name = message.get("name")
         remark = message.get("remark", "")
-        status = "remark" if remark else "checkin"
+        # For checkin action, if remark is provided, default status to "remark", otherwise "checkin"
+        #status = "remark" if remark else "checkin"
+        status = "checkin"  # Force status to "checkin"
         record = {"name": name, "remark": remark, "status": status}
         if date_key not in data_store["checkins"]:
             data_store["checkins"][date_key] = []
@@ -80,6 +82,31 @@ def handle_message(message):
         save_data()
         emit("message", {"info": f"{name} checked in on {date_key}"}, broadcast=True)
         
+    elif action == "remark":
+        # New action for remark check-in
+        year = message.get("year")
+        month = message.get("month")
+        day = message.get("day")
+        date_key = get_date_key(year, month, day)
+        name = message.get("name")
+        remark = message.get("remark", "")
+        status = "remark"  # Force status to "remark"
+        record = {"name": name, "remark": remark, "status": status}
+        if date_key not in data_store["checkins"]:
+            data_store["checkins"][date_key] = []
+        updated = False
+        for rec in data_store["checkins"][date_key]:
+            if isinstance(rec, dict) and rec.get("name") == name:
+                rec["remark"] = remark
+                rec["status"] = status
+                updated = True
+                break
+        if not updated:
+            data_store["checkins"][date_key].append(record)
+        print(f"{name} checked in with remark on {date_key}: {remark}")
+        save_data()
+        emit("message", {"info": f"{name} checked in with remark on {date_key}"}, broadcast=True)
+        
     elif action == "cancel":
         year = message.get("year")
         month = message.get("month")
@@ -96,18 +123,35 @@ def handle_message(message):
             emit("message", {"info": f"{name}'s check-in on {date_key} canceled"}, broadcast=True)
             
     elif action == "toggle_status":
+        # Update record's status based on the value sent from frontend
         year = message.get("year")
         month = message.get("month")
         day = message.get("day")
         date_key = get_date_key(year, month, day)
         name = message.get("name")
+        new_status = message.get("status")  # Expected to be "checkin" or "remark"
         if date_key in data_store["checkins"]:
             for record in data_store["checkins"][date_key]:
                 if isinstance(record, dict) and record.get("name") == name:
-                    record["status"] = "checkin"
-                    print(f"Record for {name} on {date_key} toggled to checkin status")
+                    record["status"] = new_status
+                    print(f"Record for {name} on {date_key} toggled to {new_status} status")
                     save_data()
-                    emit("message", {"info": f"Record for {name} on {date_key} toggled to checkin status"}, broadcast=True)
+                    emit("message", {"info": f"Record for {name} on {date_key} toggled to {new_status} status"}, broadcast=True)
+                    break
+    elif action == "update_remark":
+        year = message.get("year")
+        month = message.get("month")
+        day = message.get("day")
+        date_key = get_date_key(year, month, day)
+        name = message.get("name")
+        new_remark = message.get("remark")
+        if date_key in data_store["checkins"]:
+            for record in data_store["checkins"][date_key]:
+                if isinstance(record, dict) and record.get("name") == name:
+                    record["remark"] = new_remark
+                    print(f"Remark for {name} on {date_key} updated to: {new_remark}")
+                    save_data()
+                    emit("message", {"info": f"Remark for {name} on {date_key} updated"}, broadcast=True)
                     break
     else:
         print("Unknown action:", action)
