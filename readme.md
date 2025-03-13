@@ -1,4 +1,4 @@
-# sign_in on Google Colab
+# Open Google Colab and run the following code
 
 ```python
 from google.colab import drive
