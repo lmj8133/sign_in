@@ -3,14 +3,13 @@ from flask_socketio import SocketIO, emit
 import json
 import os
 
-#app = Flask(__name__)
 app = Flask(__name__, template_folder='templates')
 app.config['SECRET_KEY'] = 'secret!'
 socketio = SocketIO(app)
 
 DATA_FILE = "data.json"
 
-# Load existing data if available, otherwise initialize data_store
+# Load existing data if available; otherwise initialize data_store
 if os.path.exists(DATA_FILE):
     with open(DATA_FILE, "r", encoding="utf-8") as f:
         data_store = json.load(f)
@@ -34,7 +33,7 @@ def get_date_key(year, month, day):
 
 @socketio.on('connect')
 def handle_connect():
-    # When a client connects, send the stored names and all checkins
+    # When a client connects, send the stored names and all check-ins
     emit("initial_data", data_store)
 
 @socketio.on('get_month_data')
@@ -42,7 +41,7 @@ def handle_get_month_data(message):
     year = message.get("year")
     month = message.get("month")
     month_prefix = f"{year}-{int(month)+1:02d}-"
-    # Filter check-ins for keys that start with month_prefix
+    # Filter check-ins for keys that start with the month prefix
     month_data = { key: val for key, val in data_store["checkins"].items() if key.startswith(month_prefix) }
     emit("month_data", month_data)
 
@@ -55,7 +54,7 @@ def handle_message(message):
         print("Name list updated:", names)
         save_data()
         emit("message", {"info": "Name list updated"}, broadcast=True)
-        
+
     elif action == "checkin":
         year = message.get("year")
         month = message.get("month")
@@ -63,10 +62,10 @@ def handle_message(message):
         date_key = get_date_key(year, month, day)
         name = message.get("name")
         remark = message.get("remark", "")
-        # For checkin action, if remark is provided, default status to "remark", otherwise "checkin"
-        #status = "remark" if remark else "checkin"
         status = "checkin"  # Force status to "checkin"
-        record = {"name": name, "remark": remark, "status": status}
+        # Read hours (only for check-in); default to 1
+        hours = message.get("hours", 1)
+        record = {"name": name, "remark": remark, "status": status, "hours": hours}
         if date_key not in data_store["checkins"]:
             data_store["checkins"][date_key] = []
         updated = False
@@ -74,16 +73,16 @@ def handle_message(message):
             if isinstance(rec, dict) and rec.get("name") == name:
                 rec["remark"] = remark
                 rec["status"] = status
+                rec["hours"] = hours  # Update hours
                 updated = True
                 break
         if not updated:
             data_store["checkins"][date_key].append(record)
-        print(f"{name} checked in on {date_key} with remark: {remark}")
+        print(f"{name} checked in on {date_key} with remark: {remark} and hours: {hours}")
         save_data()
-        emit("message", {"info": f"{name} checked in on {date_key}"}, broadcast=True)
-        
+        emit("message", {"info": f"{name} checked in on {date_key} (hours: {hours})"}, broadcast=True)
+
     elif action == "remark":
-        # New action for remark check-in
         year = message.get("year")
         month = message.get("month")
         day = message.get("day")
@@ -91,6 +90,7 @@ def handle_message(message):
         name = message.get("name")
         remark = message.get("remark", "")
         status = "remark"  # Force status to "remark"
+        # For remark, do not record hours
         record = {"name": name, "remark": remark, "status": status}
         if date_key not in data_store["checkins"]:
             data_store["checkins"][date_key] = []
@@ -106,7 +106,7 @@ def handle_message(message):
         print(f"{name} checked in with remark on {date_key}: {remark}")
         save_data()
         emit("message", {"info": f"{name} checked in with remark on {date_key}"}, broadcast=True)
-        
+
     elif action == "cancel":
         year = message.get("year")
         month = message.get("month")
@@ -161,6 +161,5 @@ def index():
     return render_template('index.html')
 
 if __name__ == '__main__':
-    #socketio.run(app, debug=True)
     socketio.run(app, host='0.0.0.0', port=3000, debug=True, use_reloader=False)
 

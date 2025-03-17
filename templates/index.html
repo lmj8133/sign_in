@@ -169,13 +169,15 @@
       </div>
     </div>
   </div>
-  
+
   <!-- Modal for check-in selection -->
   <div id="checkinModal" class="modal">
     <div class="modal-content">
       <p>Select a name to check in for this day:</p>
       <select id="checkinNameSelect"></select>
       <input id="checkinRemark" type="text" placeholder="Remark (optional)">
+      <!-- Add hours input field, default is 1 -->
+      <input id="checkinHours" type="number" placeholder="Hours" value="1" min="0.5">
       <div class="modal-buttons">
         <button id="confirmCheckin" style="background:#34a853; color:white;">Check In</button>
         <button id="remarkButton" style="background:#1a73e8; color:white;">Remark</button>
@@ -208,6 +210,7 @@
       let hue = Math.abs(hash) % 360;
       return `hsl(${hue}, 90%, 60%)`;
     }
+    
     // Get a lighter version of an HSL color string
     function getLighterColor(hslString) {
       const regex = /hsl\((\d+),\s*(\d+)%\s*,\s*(\d+)%\)/;
@@ -233,7 +236,7 @@
         this.name = name;
         this.day = day;
         this.remark = remark;
-        // Use provided status; if not provided, default based on remark presence (default is "checkin")
+        // Default status is "checkin" unless a remark exists or a status is provided
         this.status = status ? status : (remark ? "remark" : "checkin");
         if (CheckinRecord.colorMapping[name]) {
           this.color = CheckinRecord.colorMapping[name];
@@ -249,7 +252,7 @@
         if (this.status === "checkin") {
           div.style.backgroundColor = this.color;
           div.style.color = "black";
-          // Only for checkin records, prepend an icon image
+          // For check-in records, prepend an icon image
           const iconUrl = "https://img.icons8.com/color/16/000000/checked-checkbox.png";
           div.innerHTML = `<img src="${iconUrl}" style="vertical-align:middle; margin-right:4px;">` +
                           (this.remark ? `${this.name} (${this.remark})` : this.name);
@@ -268,7 +271,7 @@
       }
     }
     
-    // Connect to backend using socket.io (assumes backend handles these messages)
+    // Connect to backend using socket.io
     const socket = io();
     socket.on("connect", () => {
       console.log("Socket.IO connection established");
@@ -483,10 +486,12 @@
       });
     }
     
-    // Confirm check-in: create a record with initial status "checkin" and bind click event to open edit modal
+    // Confirm check-in: create a record with status "checkin" and send hours data to backend
     document.getElementById("confirmCheckin").addEventListener("click", function() {
       const selectedName = document.getElementById("checkinNameSelect").value;
       const remark = document.getElementById("checkinRemark").value.trim();
+      // Get the input hours value, default to 1 if empty
+      const hours = document.getElementById("checkinHours").value || 1;
       if (selectedName && currentDay) {
         let td = document.querySelector(`#calendar td.current-month[data-day='${currentDay}']`);
         let checkinsDiv = td.querySelector(".checkins");
@@ -500,13 +505,15 @@
           return;
         }
         let record = new CheckinRecord(selectedName, currentDay, remark, "checkin");
+        // Send hours data along with check-in action to the backend
         socket.emit("message", { 
           action: "checkin", 
           year: currentYear, 
           month: currentMonth, 
           day: currentDay, 
           name: selectedName, 
-          remark: remark 
+          remark: remark,
+          hours: hours
         });
         let checkinDiv = record.render();
         checkinsDiv.appendChild(checkinDiv);
@@ -519,10 +526,12 @@
       }
       document.getElementById("checkinModal").style.display = "none";
       document.getElementById("checkinRemark").value = "";
+      // Reset hours input to default value
+      document.getElementById("checkinHours").value = 1;
       currentDay = null;
     });
     
-    // Remark button event: create a record with status "remark" and send data to backend
+    // Remark button event: create a record with status "remark" without hours data
     document.getElementById("remarkButton").addEventListener("click", function() {
       const selectedName = document.getElementById("checkinNameSelect").value;
       const remark = document.getElementById("checkinRemark").value.trim();
@@ -545,7 +554,7 @@
           month: currentMonth, 
           day: currentDay, 
           name: selectedName, 
-          remark: remark 
+          remark: remark
         });
         let checkinDiv = record.render();
         checkinsDiv.appendChild(checkinDiv);
@@ -560,7 +569,7 @@
       document.getElementById("checkinRemark").value = "";
       currentDay = null;
     });
-    
+
     document.getElementById("cancelCheckin").addEventListener("click", function() {
       document.getElementById("checkinModal").style.display = "none";
       document.getElementById("checkinRemark").value = "";
@@ -576,7 +585,7 @@
         const name = currentToggleRecordElement.getAttribute("data-name");
         const day = currentToggleRecordElement.getAttribute("data-day");
         currentToggleRecordElement.setAttribute("data-remark", newRemark);
-        // Update displayed text; for checkin records include icon image
+        // Update displayed text; for check-in records include icon image
         if (currentToggleRecordElement.getAttribute("data-status") === "checkin") {
           const iconUrl = "https://img.icons8.com/color/16/000000/checked-checkbox.png";
           currentToggleRecordElement.innerHTML = `<img src="${iconUrl}" style="vertical-align:middle; margin-right:4px;">` +
@@ -619,7 +628,7 @@
           currentToggleRecordElement.innerText = currentToggleRecordElement.getAttribute("data-name") + 
             (currentToggleRecordElement.getAttribute("data-remark") ? ` (${currentToggleRecordElement.getAttribute("data-remark")})` : "");
         }
-        // Inform backend with toggled flag
+        // Inform backend with toggled status
         socket.emit("message", { 
           action: "toggle_status", 
           year: currentYear, 
