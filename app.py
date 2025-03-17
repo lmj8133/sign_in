@@ -182,6 +182,24 @@ def handle_message(message):
                     save_data()
                     emit("message", {"info": f"Remark for {name} on {date_key} updated"}, broadcast=True)
                     break
+
+    elif action == "toggle_checkbox":
+        #update checkbox status
+        year = message.get("year")
+        month = message.get("month")
+        day = message.get("day")
+        date_key = get_date_key(year, month, day)
+        name = message.get("name")
+        checkbox = message.get("checkbox")
+        if date_key in data_store["checkins"]:
+            for record in data_store["checkins"][date_key]:
+                if isinstance(record, dict) and record.get("name") == name:
+                    record["checkbox"] = checkbox
+                    print(f"Checkbox for {name} on {date_key} toggled to {checkbox}")
+                    save_data()
+                    emit("message", {"info": f"Checkbox for {name} on {date_key} toggled to {checkbox}"}, broadcast=True)
+                    break
+
     else:
         print("Unknown action:", action)
 
