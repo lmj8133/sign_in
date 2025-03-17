@@ -20,20 +20,17 @@ else:
     }
 
 def save_data():
-    """Save the data_store to a JSON file."""
+    # Save data_store to a JSON file
     with open(DATA_FILE, "w", encoding="utf-8") as f:
         json.dump(data_store, f, indent=4, ensure_ascii=False)
 
 def get_date_key(year, month, day):
-    """
-    Construct a date key in the format "YYYY-MM-DD".
-    Note: the month value from the frontend is zero-indexed.
-    """
+    # Construct a date key in the format "YYYY-MM-DD". Note: month from frontend is zero-indexed.
     return f"{year}-{int(month)+1:02d}-{int(day):02d}"
 
 @socketio.on('connect')
 def handle_connect():
-    # When a client connects, send the stored names and all check-ins
+    # Send stored names and check-ins when a client connects
     emit("initial_data", data_store)
 
 @socketio.on('get_month_data')
@@ -49,6 +46,7 @@ def handle_get_month_data(message):
 def handle_message(message):
     action = message.get("action")
     if action == "update_names":
+        # Expect names as a list of objects: {"name": "...", "added_hours": ...}
         names = message.get("names", [])
         data_store["names"] = names
         print("Name list updated:", names)
@@ -63,14 +61,16 @@ def handle_message(message):
         name = message.get("name")
         remark = message.get("remark", "")
         status = "checkin"  # Force status to "checkin"
-        # Read hours (only for check-in); default to 1
+        # Read hours (default to 1 if not provided)
         hours = message.get("hours", 1)
         record = {"name": name, "remark": remark, "status": status, "hours": hours}
         if date_key not in data_store["checkins"]:
             data_store["checkins"][date_key] = []
         updated = False
+        old_hours = 0
         for rec in data_store["checkins"][date_key]:
             if isinstance(rec, dict) and rec.get("name") == name:
+                old_hours = rec.get("hours", 0)
                 rec["remark"] = remark
                 rec["status"] = status
                 rec["hours"] = hours  # Update hours
@@ -78,6 +78,14 @@ def handle_message(message):
                 break
         if not updated:
             data_store["checkins"][date_key].append(record)
+        # Update cumulative hours (added_hours) for the user
+        for user in data_store["names"]:
+            if user["name"] == name:
+                if updated:
+                    user["added_hours"] = user.get("added_hours", 0) + (hours - old_hours)
+                else:
+                    user["added_hours"] = user.get("added_hours", 0) + hours
+                break
         print(f"{name} checked in on {date_key} with remark: {remark} and hours: {hours}")
         save_data()
         emit("message", {"info": f"{name} checked in on {date_key} (hours: {hours})"}, broadcast=True)
@@ -90,7 +98,6 @@ def handle_message(message):
         name = message.get("name")
         remark = message.get("remark", "")
         status = "remark"  # Force status to "remark"
-        # For remark, do not record hours
         record = {"name": name, "remark": remark, "status": status}
         if date_key not in data_store["checkins"]:
             data_store["checkins"][date_key] = []
@@ -116,6 +123,13 @@ def handle_message(message):
         if date_key in data_store["checkins"]:
             for record in data_store["checkins"][date_key]:
                 if isinstance(record, dict) and record.get("name") == name:
+                    # If record is a checkin with hours, deduct the hours from cumulative hours
+                    if record.get("status") == "checkin" and "hours" in record:
+                        hrs = record["hours"]
+                        for user in data_store["names"]:
+                            if user["name"] == name:
+                                user["added_hours"] = user.get("added_hours", 0) - hrs
+                                break
                     data_store["checkins"][date_key].remove(record)
                     break
             print(f"{name}'s check-in on {date_key} canceled")
@@ -123,7 +137,6 @@ def handle_message(message):
             emit("message", {"info": f"{name}'s check-in on {date_key} canceled"}, broadcast=True)
             
     elif action == "toggle_status":
-        # Update record's status based on the value sent from frontend
         year = message.get("year")
         month = message.get("month")
         day = message.get("day")

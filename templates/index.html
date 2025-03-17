@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <title>Attendance Sheet - Calendar</title>
-  <!-- Use Google Fonts (Roboto) for a modern look -->
+  <!-- Google Fonts (Roboto) for a modern look -->
   <link href="https://fonts.googleapis.com/css2?family=Roboto&display=swap" rel="stylesheet">
   <style>
     body {
@@ -231,10 +231,9 @@
     
     let nameList = [];
     let checkinData = {};
-    // Global variable to store the element being edited
     let editTarget = null;
     
-    // CheckinRecord class: stores name, day, remark, status ("checkin" or "remark"), and check-in hours
+    // CheckinRecord class: stores name, day, remark, status, and check-in hours
     class CheckinRecord {
       static colorMapping = {};
       constructor(name, day, remark = "", status = null, hours = null) {
@@ -288,6 +287,7 @@
       console.log("Message received:", data);
     });
     socket.on("initial_data", (data) => {
+      // When initial_data is received, nameList is an array of objects
       nameList = data.names || [];
       checkinData = data.checkins || {};
       updateNameListDisplay();
@@ -313,7 +313,6 @@
     }
     
     function generateCalendar(year, month) {
-      // Calculate today's key
       const today = new Date();
       const todayKey = `${today.getFullYear()}-${String(today.getMonth()+1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
       
@@ -351,7 +350,6 @@
           cellClass = "next-month";
           dateKey = formatDateKey(nextYear, nextMonth, dateNum);
         }
-        // Add "today" class if this cell matches today's date
         if (dateKey === todayKey) {
           cellClass += " today";
         }
@@ -400,14 +398,13 @@
             let personName = typeof record === "object" ? record.name : record;
             let remark = typeof record === "object" ? record.remark : "";
             let status = (typeof record === "object" && record.status) ? record.status : (remark ? "remark" : "checkin");
-            let hours = (typeof record === "object" && record.hours) ? record.hours : null;
             let displayedDay = td.querySelector(".date").innerText;
-            let checkinRecord = new CheckinRecord(personName, displayedDay, remark, status, hours);
+            let checkinRecord = new CheckinRecord(personName, displayedDay, remark, status, record.hours);
             let checkinDiv = checkinRecord.render();
             checkinDiv.addEventListener("click", function(e) {
               e.stopPropagation();
               let editModal = document.getElementById("editRecordModal");
-              editModal.targetElement = this;
+              editTarget = this;
               document.getElementById("editRemarkInput").value = this.getAttribute("data-remark");
               const currentHours = this.innerHTML.match(/\[(.*?) hrs\]/);
               document.getElementById("editHoursInput").value = currentHours ? currentHours[1] : 1;
@@ -442,14 +439,14 @@
     function updateNameListDisplay() {
       const ul = document.getElementById("nameListUl");
       ul.innerHTML = "";
-      nameList.forEach(name => {
+      nameList.forEach(user => {
         const li = document.createElement("li");
-        li.innerText = name;
-        li.style.backgroundColor = CheckinRecord.colorMapping[name] || "#ffffff";
+        li.innerText = `${user.name} (${user.added_hours} hrs)`;
+        li.style.backgroundColor = CheckinRecord.colorMapping[user.name] || "#ffffff";
         li.addEventListener("click", function() {
-          if (confirm("Do you want to delete " + name + " from the list?")) {
-            nameList = nameList.filter(n => n !== name);
-            delete CheckinRecord.colorMapping[name];
+          if (confirm("Do you want to delete " + user.name + " from the list?")) {
+            nameList = nameList.filter(u => u.name !== user.name);
+            delete CheckinRecord.colorMapping[user.name];
             updateNameListDisplay();
             sendNameListUpdate();
           }
@@ -465,8 +462,8 @@
     
     document.getElementById("addNameButton").addEventListener("click", function() {
       const newName = document.getElementById("newNameInput").value.trim();
-      if (newName && !nameList.includes(newName)) {
-        nameList.push(newName);
+      if (newName && !nameList.some(u => u.name === newName)) {
+        nameList.push({name: newName, added_hours: 0});
         if (!CheckinRecord.colorMapping[newName]) {
           CheckinRecord.colorMapping[newName] = getColorFromName(newName);
         }
@@ -483,10 +480,10 @@
     function populateCheckinDropdown() {
       const select = document.getElementById("checkinNameSelect");
       select.innerHTML = "";
-      nameList.forEach(name => {
+      nameList.forEach(user => {
         const option = document.createElement("option");
-        option.value = name;
-        option.text = name;
+        option.value = user.name;
+        option.text = user.name;
         select.appendChild(option);
       });
     }
@@ -625,7 +622,6 @@
           day: day, 
           name: name 
         });
-        // Remove the record from its parent node
         if (editTarget.parentNode) {
           editTarget.parentNode.removeChild(editTarget);
         }
