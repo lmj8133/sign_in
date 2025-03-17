@@ -205,6 +205,12 @@
   </div>
   
   <script>
+    // Helper: get cumulative added hours for a given user
+    function getUserAddedHours(name) {
+      let user = nameList.find(u => u.name === name);
+      return user ? user.added_hours : 0;
+    }
+    
     // djb2 algorithm: compute color from a given name
     function getColorFromName(name) {
       let hash = 5381;
@@ -253,23 +259,38 @@
       render() {
         const div = document.createElement("div");
         div.className = "checkin";
+        
+        // If it's a checkin, we display name(remark)[hours]
+        // and append an "unchecked box" image if hours >= 4
         if (this.status === "checkin") {
           div.style.backgroundColor = this.color;
           div.style.color = "black";
           let text = this.name;
           if (this.remark) {
-            text += ` (${this.remark})`;
+            text += `(${this.remark})`;
           }
           if (this.hours !== null) {
-            text += ` [${this.hours} hrs]`;
+            text += `[${this.hours}]`;
           }
           div.innerHTML = text;
+          
+          // Check if total hours >= 4
+          const total = getUserAddedHours(this.name);
+          if (total >= 4) {
+            // Add a space so it's not jammed against the text
+            const iconUrl = "https://img.icons8.com/color/16/000000/unchecked-checkbox.png";
+            div.innerHTML = text + 
+                  `<img src="${iconUrl}" style="vertical-align:middle; margin-left:4px;">`;
+          }
         } else {
+          // "remark" case
           const lighter = getLighterColor(this.color);
           div.style.backgroundColor = lighter;
           div.style.color = "";
           div.innerText = this.remark ? `${this.name} (${this.remark})` : this.name;
         }
+        
+        // Common attributes
         div.setAttribute("data-day", this.day);
         div.setAttribute("data-name", this.name);
         div.setAttribute("data-remark", this.remark);
@@ -405,6 +426,8 @@
               e.stopPropagation();
               let editModal = document.getElementById("editRecordModal");
               editTarget = this;
+              let personName = this.getAttribute("data-name");
+              editModal.querySelector("p").innerText = "Edit " + personName + "'s Check-in Record";
               document.getElementById("editRemarkInput").value = this.getAttribute("data-remark");
               const currentHours = this.innerHTML.match(/\[(.*?) hrs\]/);
               document.getElementById("editHoursInput").value = currentHours ? currentHours[1] : 1;
@@ -493,17 +516,12 @@
       const remark = document.getElementById("checkinRemark").value.trim();
       const hours = parseFloat(document.getElementById("checkinHours").value) || 1;
       if (selectedName && currentDay) {
-        let td = document.querySelector(`#calendar td.current-month[data-day='${currentDay}']`);
-        let checkinsDiv = td.querySelector(".checkins");
-        const alreadyCheckedIn = Array.from(checkinsDiv.getElementsByClassName("checkin"))
-          .some(div => div.getAttribute("data-name") === selectedName);
-        if (alreadyCheckedIn) {
-          alert("This person has already checked in for today.");
-          document.getElementById("checkinModal").style.display = "none";
-          document.getElementById("checkinRemark").value = "";
-          currentDay = null;
-          return;
+        // Update cumulative hours in client-side nameList BEFORE rendering the record.
+        let user = nameList.find(u => u.name === selectedName);
+        if (user) {
+          user.added_hours += hours;
         }
+        updateNameListDisplay();
         let record = new CheckinRecord(selectedName, currentDay, remark, "checkin", hours);
         socket.emit("message", { 
           action: "checkin", 
@@ -514,17 +532,21 @@
           remark: remark,
           hours: hours
         });
+        let td = document.querySelector(`#calendar td.current-month[data-day='${currentDay}']`);
+        let checkinsDiv = td.querySelector(".checkins");
         let checkinDiv = record.render();
-        checkinsDiv.appendChild(checkinDiv);
         checkinDiv.addEventListener("click", function(e) {
           e.stopPropagation();
           let editModal = document.getElementById("editRecordModal");
           editTarget = this;
+          let personName = this.getAttribute("data-name");
+          editModal.querySelector("p").innerText = "Edit " + personName + "'s Check-in Record";
           document.getElementById("editRemarkInput").value = this.getAttribute("data-remark");
           const currentHours = this.innerHTML.match(/\[(.*?) hrs\]/);
           document.getElementById("editHoursInput").value = currentHours ? currentHours[1] : 1;
           editModal.style.display = "block";
         });
+        checkinsDiv.appendChild(checkinDiv);
       }
       document.getElementById("checkinModal").style.display = "none";
       document.getElementById("checkinRemark").value = "";
@@ -562,6 +584,8 @@
           e.stopPropagation();
           let editModal = document.getElementById("editRecordModal");
           editTarget = this;
+          let personName = this.getAttribute("data-name");
+          editModal.querySelector("p").innerText = "Edit " + personName + "'s Check-in Record";
           document.getElementById("editRemarkInput").value = this.getAttribute("data-remark");
           editModal.style.display = "block";
         });
@@ -600,9 +624,9 @@
         editTarget.style.color = "black";
         let updatedText = name;
         if (newRemark) {
-          updatedText += ` (${newRemark})`;
+          updatedText += `(${newRemark})`;
         }
-        updatedText += ` [${newHours} hrs]`;
+        updatedText += `[${newHours}]`;
         editTarget.innerHTML = updatedText;
       }
       editModal.style.display = "none";
