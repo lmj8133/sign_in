@@ -177,7 +177,7 @@
       <select id="checkinNameSelect"></select>
       <input id="checkinRemark" type="text" placeholder="Remark (optional)">
       <!-- Add hours input field, default is 1 -->
-      <input id="checkinHours" type="number" placeholder="Hours" value="1" min="0.5">
+      <input id="checkinHours" type="number" placeholder="Hours" value="1" min="1" step="0.5">
       <div class="modal-buttons">
         <button id="confirmCheckin" style="background:#34a853; color:white;">Check In</button>
         <button id="remarkButton" style="background:#1a73e8; color:white;">Remark</button>
@@ -229,15 +229,17 @@
     let checkinData = {};
     let currentToggleRecordElement = null;
     
-    // CheckinRecord class: stores name, day, remark, and status ("checkin" or "remark")
+    // CheckinRecord class: stores name, day, remark, status ("checkin" or "remark"), and check-in hours
     class CheckinRecord {
       static colorMapping = {};
-      constructor(name, day, remark = "", status = null) {
+      constructor(name, day, remark = "", status = null, hours = null) {
         this.name = name;
         this.day = day;
         this.remark = remark;
         // Default status is "checkin" unless a remark exists or a status is provided
         this.status = status ? status : (remark ? "remark" : "checkin");
+        // Convert hours to a float if provided
+        this.hours = hours !== null ? parseFloat(hours) : null;
         if (CheckinRecord.colorMapping[name]) {
           this.color = CheckinRecord.colorMapping[name];
         } else {
@@ -252,10 +254,14 @@
         if (this.status === "checkin") {
           div.style.backgroundColor = this.color;
           div.style.color = "black";
-          // For check-in records, prepend an icon image
-          const iconUrl = "https://img.icons8.com/color/16/000000/checked-checkbox.png";
-          div.innerHTML = `<img src="${iconUrl}" style="vertical-align:middle; margin-right:4px;">` +
-                          (this.remark ? `${this.name} (${this.remark})` : this.name);
+          let text = this.name;
+          if (this.remark) {
+            text += ` (${this.remark})`;
+          }
+          if (this.hours !== null) {
+            text += ` [${this.hours} hrs]`;
+          }
+          div.innerHTML = text;
         } else {
           // For remark records, no icon is displayed.
           const lighter = getLighterColor(this.color);
@@ -395,8 +401,9 @@
             let remark = typeof record === "object" ? record.remark : "";
             let status = (typeof record === "object" && record.status) ? record.status 
                          : (remark ? "remark" : "checkin");
+            let hours = (typeof record === "object" && record.hours) ? record.hours : null;
             let displayedDay = td.querySelector(".date").innerText;
-            let checkinRecord = new CheckinRecord(personName, displayedDay, remark, status);
+            let checkinRecord = new CheckinRecord(personName, displayedDay, remark, status, hours);
             let checkinDiv = checkinRecord.render();
             // When a record is clicked, open the edit record modal
             checkinDiv.addEventListener("click", function(e) {
@@ -490,8 +497,8 @@
     document.getElementById("confirmCheckin").addEventListener("click", function() {
       const selectedName = document.getElementById("checkinNameSelect").value;
       const remark = document.getElementById("checkinRemark").value.trim();
-      // Get the input hours value, default to 1 if empty
-      const hours = document.getElementById("checkinHours").value || 1;
+      // Get the input hours value as a float, default to 1 if empty
+      const hours = parseFloat(document.getElementById("checkinHours").value) || 1;
       if (selectedName && currentDay) {
         let td = document.querySelector(`#calendar td.current-month[data-day='${currentDay}']`);
         let checkinsDiv = td.querySelector(".checkins");
@@ -504,7 +511,8 @@
           currentDay = null;
           return;
         }
-        let record = new CheckinRecord(selectedName, currentDay, remark, "checkin");
+        // Pass the hours value into the new CheckinRecord
+        let record = new CheckinRecord(selectedName, currentDay, remark, "checkin", hours);
         // Send hours data along with check-in action to the backend
         socket.emit("message", { 
           action: "checkin", 
