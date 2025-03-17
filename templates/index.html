@@ -239,15 +239,16 @@
     let checkinData = {};
     let editTarget = null;
     
-    // CheckinRecord class: stores name, day, remark, status, and check-in hours
+    // CheckinRecord class: stores name, day, remark, status, hours, and checkbox status
     class CheckinRecord {
       static colorMapping = {};
-      constructor(name, day, remark = "", status = null, hours = null) {
+      constructor(name, day, remark = "", status = null, hours = null, checkbox = 0) {
         this.name = name;
         this.day = day;
         this.remark = remark;
         this.status = status ? status : (remark ? "remark" : "checkin");
         this.hours = hours !== null ? parseFloat(hours) : null;
+        this.checkbox = checkbox; // checkbox status from server (0 or 1)
         if (CheckinRecord.colorMapping[name]) {
           this.color = CheckinRecord.colorMapping[name];
         } else {
@@ -260,8 +261,7 @@
         const div = document.createElement("div");
         div.className = "checkin";
         
-        // If it's a checkin, we display name(remark)[hours]
-        // and append an "unchecked box" image if hours >= 4
+        // For checkin records: display name(remark)[hours] and add icon if checkbox status is 1
         if (this.status === "checkin") {
           div.style.backgroundColor = this.color;
           div.style.color = "black";
@@ -273,17 +273,12 @@
             text += `[${this.hours}]`;
           }
           div.innerHTML = text;
-          
-          // Check if total hours >= 4
-          const total = getUserAddedHours(this.name);
-          if (total >= 4) {
-            // Add a space so it's not jammed against the text
+          if (this.checkbox == 1) {
             const iconUrl = "https://img.icons8.com/color/16/000000/unchecked-checkbox.png";
-            div.innerHTML = text + 
-                  `<img src="${iconUrl}" style="vertical-align:middle; margin-left:4px;">`;
+            div.innerHTML = text + `<img src="${iconUrl}" style="vertical-align:middle; margin-left:4px;">`;
           }
         } else {
-          // "remark" case
+          // For remark records: use a lighter color version
           const lighter = getLighterColor(this.color);
           div.style.backgroundColor = lighter;
           div.style.color = "";
@@ -306,15 +301,18 @@
     });
     socket.on("message", (data) => {
       console.log("Message received:", data);
+      // Request updated month data to refresh the calendar UI
+      socket.emit("get_month_data", { year: currentYear, month: currentMonth });
+      updateNameListDisplay();
     });
     socket.on("initial_data", (data) => {
-      // When initial_data is received, nameList is an array of objects
       nameList = data.names || [];
       checkinData = data.checkins || {};
       updateNameListDisplay();
       loadCheckinsForMonth(currentYear, currentMonth);
     });
     socket.on("month_data", (data) => {
+      // Merge incoming month_data with current checkinData and re-render
       for (let key in data) {
         checkinData[key] = data[key];
       }
@@ -385,8 +383,6 @@
       updateCalendarCellEvents();
       updateCalendarTitle(year, month);
       socket.emit("get_month_data", { year: currentYear, month: currentMonth });
-      socket.emit("get_month_data", { year: prevYear, month: prevMonth });
-      socket.emit("get_month_data", { year: nextYear, month: nextMonth });
     }
     
     function updateCalendarTitle(year, month) {
@@ -420,7 +416,8 @@
             let remark = typeof record === "object" ? record.remark : "";
             let status = (typeof record === "object" && record.status) ? record.status : (remark ? "remark" : "checkin");
             let displayedDay = td.querySelector(".date").innerText;
-            let checkinRecord = new CheckinRecord(personName, displayedDay, remark, status, record.hours);
+            let checkboxStatus = (typeof record === "object" && typeof record.checkbox !== "undefined") ? record.checkbox : 0;
+            let checkinRecord = new CheckinRecord(personName, displayedDay, remark, status, record.hours, checkboxStatus);
             let checkinDiv = checkinRecord.render();
             checkinDiv.addEventListener("click", function(e) {
               e.stopPropagation();
@@ -429,7 +426,7 @@
               let personName = this.getAttribute("data-name");
               editModal.querySelector("p").innerText = "Edit " + personName + "'s Check-in Record";
               document.getElementById("editRemarkInput").value = this.getAttribute("data-remark");
-              const currentHours = this.innerHTML.match(/\[(.*?) hrs\]/);
+              const currentHours = this.innerHTML.match(/\[(.*?)\]/);
               document.getElementById("editHoursInput").value = currentHours ? currentHours[1] : 1;
               editModal.style.display = "block";
             });
@@ -516,13 +513,6 @@
       const remark = document.getElementById("checkinRemark").value.trim();
       const hours = parseFloat(document.getElementById("checkinHours").value) || 1;
       if (selectedName && currentDay) {
-        // Update cumulative hours in client-side nameList BEFORE rendering the record.
-        let user = nameList.find(u => u.name === selectedName);
-        if (user) {
-          user.added_hours += hours;
-        }
-        updateNameListDisplay();
-        let record = new CheckinRecord(selectedName, currentDay, remark, "checkin", hours);
         socket.emit("message", { 
           action: "checkin", 
           year: currentYear, 
@@ -532,21 +522,6 @@
           remark: remark,
           hours: hours
         });
-        let td = document.querySelector(`#calendar td.current-month[data-day='${currentDay}']`);
-        let checkinsDiv = td.querySelector(".checkins");
-        let checkinDiv = record.render();
-        checkinDiv.addEventListener("click", function(e) {
-          e.stopPropagation();
-          let editModal = document.getElementById("editRecordModal");
-          editTarget = this;
-          let personName = this.getAttribute("data-name");
-          editModal.querySelector("p").innerText = "Edit " + personName + "'s Check-in Record";
-          document.getElementById("editRemarkInput").value = this.getAttribute("data-remark");
-          const currentHours = this.innerHTML.match(/\[(.*?) hrs\]/);
-          document.getElementById("editHoursInput").value = currentHours ? currentHours[1] : 1;
-          editModal.style.display = "block";
-        });
-        checkinsDiv.appendChild(checkinDiv);
       }
       document.getElementById("checkinModal").style.display = "none";
       document.getElementById("checkinRemark").value = "";
@@ -569,7 +544,6 @@
           currentDay = null;
           return;
         }
-        let record = new CheckinRecord(selectedName, currentDay, remark, "remark");
         socket.emit("message", { 
           action: "remark", 
           year: currentYear, 
@@ -577,17 +551,6 @@
           day: currentDay, 
           name: selectedName, 
           remark: remark
-        });
-        let checkinDiv = record.render();
-        checkinsDiv.appendChild(checkinDiv);
-        checkinDiv.addEventListener("click", function(e) {
-          e.stopPropagation();
-          let editModal = document.getElementById("editRecordModal");
-          editTarget = this;
-          let personName = this.getAttribute("data-name");
-          editModal.querySelector("p").innerText = "Edit " + personName + "'s Check-in Record";
-          document.getElementById("editRemarkInput").value = this.getAttribute("data-remark");
-          editModal.style.display = "block";
         });
       }
       document.getElementById("checkinModal").style.display = "none";
@@ -618,18 +581,8 @@
           remark: newRemark,
           hours: newHours
         });
-        editTarget.setAttribute("data-remark", newRemark);
-        editTarget.setAttribute("data-status", "checkin");
-        editTarget.style.backgroundColor = CheckinRecord.colorMapping[name];
-        editTarget.style.color = "black";
-        let updatedText = name;
-        if (newRemark) {
-          updatedText += `(${newRemark})`;
-        }
-        updatedText += `[${newHours}]`;
-        editTarget.innerHTML = updatedText;
       }
-      editModal.style.display = "none";
+      document.getElementById("editRecordModal").style.display = "none";
       editTarget = null;
     });
     
@@ -650,13 +603,12 @@
           editTarget.parentNode.removeChild(editTarget);
         }
       }
-      editModal.style.display = "none";
+      document.getElementById("editRecordModal").style.display = "none";
       editTarget = null;
     });
     
     document.getElementById("closeEditRecordModal").addEventListener("click", function() {
-      let editModal = document.getElementById("editRecordModal");
-      editModal.style.display = "none";
+      document.getElementById("editRecordModal").style.display = "none";
       editTarget = null;
     });
     

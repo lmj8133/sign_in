@@ -68,24 +68,36 @@ def handle_message(message):
             data_store["checkins"][date_key] = []
         updated = False
         old_hours = 0
+        current_record = None
+        # Check if there is already a record for this user on the given day
         for rec in data_store["checkins"][date_key]:
             if isinstance(rec, dict) and rec.get("name") == name:
                 old_hours = rec.get("hours", 0)
                 rec["remark"] = remark
                 rec["status"] = status
                 rec["hours"] = hours  # Update hours
+                current_record = rec
                 updated = True
                 break
         if not updated:
             data_store["checkins"][date_key].append(record)
-        # Update cumulative hours (added_hours) for the user
-        for user in data_store["names"]:
-            if user["name"] == name:
+            current_record = record
+
+        # Update cumulative hours (added_hours) for the user in the names list
+        for u in data_store["names"]:
+            if u["name"] == name:
                 if updated:
-                    user["added_hours"] = user.get("added_hours", 0) + (hours - old_hours)
+                    u["added_hours"] = u.get("added_hours", 0) + (hours - old_hours)
                 else:
-                    user["added_hours"] = user.get("added_hours", 0) + hours
+                    u["added_hours"] = u.get("added_hours", 0) + hours
+                # If cumulative hours are >= 4, mark checkbox and subtract 4 hours
+                if u["added_hours"] >= 4:
+                    current_record["checkbox"] = 1
+                    u["added_hours"] -= 4
+                else:
+                    current_record["checkbox"] = 0
                 break
+
         print(f"{name} checked in on {date_key} with remark: {remark} and hours: {hours}")
         save_data()
         emit("message", {"info": f"{name} checked in on {date_key} (hours: {hours})"}, broadcast=True)
@@ -123,12 +135,15 @@ def handle_message(message):
         if date_key in data_store["checkins"]:
             for record in data_store["checkins"][date_key]:
                 if isinstance(record, dict) and record.get("name") == name:
-                    # If record is a checkin with hours, deduct the hours from cumulative hours
+                    # If record is a checkin with hours, deduct its hours from cumulative hours
                     if record.get("status") == "checkin" and "hours" in record:
                         hrs = record["hours"]
-                        for user in data_store["names"]:
-                            if user["name"] == name:
-                                user["added_hours"] = user.get("added_hours", 0) - hrs
+                        for u in data_store["names"]:
+                            if u["name"] == name:
+                                u["added_hours"] = u.get("added_hours", 0) - hrs
+                                # If cumulative hours are < 0, add 4 hours back
+                                if u["added_hours"] < 0:
+                                    u["added_hours"] = u.get("added_hours", 0) + 4
                                 break
                     data_store["checkins"][date_key].remove(record)
                     break
@@ -151,6 +166,7 @@ def handle_message(message):
                     save_data()
                     emit("message", {"info": f"Record for {name} on {date_key} toggled to {new_status} status"}, broadcast=True)
                     break
+
     elif action == "update_remark":
         year = message.get("year")
         month = message.get("month")
