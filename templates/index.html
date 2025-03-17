@@ -87,6 +87,11 @@
       overflow: hidden;
       text-overflow: ellipsis;
     }
+    /* Highlight today's cell */
+    td.today {
+      border: 2px solid #FF5722;
+      box-shadow: inset 0 0 10px rgba(255,87,34,0.5);
+    }
     /* Modal styling */
     .modal {
       display: none;
@@ -308,6 +313,10 @@
     }
     
     function generateCalendar(year, month) {
+      // Calculate today's key
+      const today = new Date();
+      const todayKey = `${today.getFullYear()}-${String(today.getMonth()+1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+      
       const firstDay = new Date(year, month, 1).getDay();
       const daysInMonth = new Date(year, month + 1, 0).getDate();
       let prevMonth = month - 1, prevYear = year;
@@ -341,6 +350,10 @@
           cellContent = dateNum;
           cellClass = "next-month";
           dateKey = formatDateKey(nextYear, nextMonth, dateNum);
+        }
+        // Add "today" class if this cell matches today's date
+        if (dateKey === todayKey) {
+          cellClass += " today";
         }
         calendarHTML += `<td class="${cellClass}" data-date="${dateKey}" data-day="${dataDay}">
                            <div class="date">${cellContent}</div>
@@ -509,7 +522,7 @@
         checkinDiv.addEventListener("click", function(e) {
           e.stopPropagation();
           let editModal = document.getElementById("editRecordModal");
-          editModal.targetElement = this;
+          editTarget = this;
           document.getElementById("editRemarkInput").value = this.getAttribute("data-remark");
           const currentHours = this.innerHTML.match(/\[(.*?) hrs\]/);
           document.getElementById("editHoursInput").value = currentHours ? currentHours[1] : 1;
@@ -551,7 +564,7 @@
         checkinDiv.addEventListener("click", function(e) {
           e.stopPropagation();
           let editModal = document.getElementById("editRecordModal");
-          editModal.targetElement = this;
+          editTarget = this;
           document.getElementById("editRemarkInput").value = this.getAttribute("data-remark");
           editModal.style.display = "block";
         });
@@ -567,20 +580,14 @@
       currentDay = null;
     });
     
-    // Edit modal: update remark only
-    document.getElementById("updateRemarkButton") && document.getElementById("updateRemarkButton").addEventListener("click", function() {
-      // This button is removed; included here for reference if needed.
-    });
-    
     // Edit modal: confirm check-in update (including hours)
     document.getElementById("confirmEditCheckin").addEventListener("click", function() {
       let editModal = document.getElementById("editRecordModal");
-      let targetEl = editModal.targetElement;
-      if (targetEl) {
+      if (editTarget) {
         const newRemark = document.getElementById("editRemarkInput").value.trim();
         const newHours = parseFloat(document.getElementById("editHoursInput").value) || 1;
-        const name = targetEl.getAttribute("data-name");
-        const day = targetEl.getAttribute("data-day");
+        const name = editTarget.getAttribute("data-name");
+        const day = editTarget.getAttribute("data-day");
         socket.emit("message", { 
           action: "checkin", 
           year: currentYear, 
@@ -590,28 +597,27 @@
           remark: newRemark,
           hours: newHours
         });
-        targetEl.setAttribute("data-remark", newRemark);
-        targetEl.setAttribute("data-status", "checkin");
-        targetEl.style.backgroundColor = CheckinRecord.colorMapping[name];
-        targetEl.style.color = "black";
+        editTarget.setAttribute("data-remark", newRemark);
+        editTarget.setAttribute("data-status", "checkin");
+        editTarget.style.backgroundColor = CheckinRecord.colorMapping[name];
+        editTarget.style.color = "black";
         let updatedText = name;
         if (newRemark) {
           updatedText += ` (${newRemark})`;
         }
         updatedText += ` [${newHours} hrs]`;
-        targetEl.innerHTML = updatedText;
+        editTarget.innerHTML = updatedText;
       }
       editModal.style.display = "none";
-      editModal.targetElement = null;
+      editTarget = null;
     });
     
     // Edit modal: cancel record removal
     document.getElementById("cancelRecordButton").addEventListener("click", function() {
       let editModal = document.getElementById("editRecordModal");
-      let targetEl = editModal.targetElement;
-      if (targetEl) {
-        const day = targetEl.getAttribute("data-day");
-        const name = targetEl.getAttribute("data-name");
+      if (editTarget) {
+        const day = editTarget.getAttribute("data-day");
+        const name = editTarget.getAttribute("data-name");
         socket.emit("message", { 
           action: "cancel", 
           year: currentYear, 
@@ -619,17 +625,19 @@
           day: day, 
           name: name 
         });
-        const td = document.querySelector(`#calendar td.current-month[data-day='${day}']`);
-        td.querySelector(".checkins").removeChild(targetEl);
+        // Remove the record from its parent node
+        if (editTarget.parentNode) {
+          editTarget.parentNode.removeChild(editTarget);
+        }
       }
       editModal.style.display = "none";
-      editModal.targetElement = null;
+      editTarget = null;
     });
     
     document.getElementById("closeEditRecordModal").addEventListener("click", function() {
       let editModal = document.getElementById("editRecordModal");
       editModal.style.display = "none";
-      editModal.targetElement = null;
+      editTarget = null;
     });
     
   </script>
