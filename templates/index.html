@@ -181,7 +181,7 @@
       <p>Select a name to check in for this day:</p>
       <select id="checkinNameSelect"></select>
       <input id="checkinRemark" type="text" placeholder="Remark (optional)">
-      <input id="checkinHours" type="number" placeholder="Hours" value="1" min="1" step="0.5">
+      <input id="checkinHours" type="text" placeholder="Hours" value="1">
       <div class="modal-buttons">
         <button id="confirmCheckin" style="background:#34a853; color:white;">Check In</button>
         <button id="remarkButton" style="background:#1a73e8; color:white;">Remark</button>
@@ -248,7 +248,7 @@
         this.remark = remark;
         this.status = status ? status : (remark ? "remark" : "checkin");
         this.hours = hours !== null ? parseFloat(hours) : null;
-        this.checkbox = checkbox; // checkbox status from server (0 or 1)
+        this.checkbox = checkbox; // checkbox status: 0 (none), 1 (unchecked), 2 (checked)
         if (CheckinRecord.colorMapping[name]) {
           this.color = CheckinRecord.colorMapping[name];
         } else {
@@ -261,7 +261,7 @@
         const div = document.createElement("div");
         div.className = "checkin";
         
-        // For checkin records: display name(remark)[hours] and add icon if checkbox status is 1
+        // For checkin records: display name(remark)[hours]
         if (this.status === "checkin") {
           div.style.backgroundColor = this.color;
           div.style.color = "black";
@@ -273,9 +273,36 @@
             text += `[${this.hours}]`;
           }
           div.innerHTML = text;
-          if (this.checkbox == 1) {
-            const iconUrl = "https://img.icons8.com/color/16/000000/unchecked-checkbox.png";
-            div.innerHTML = text + `<img src="${iconUrl}" style="vertical-align:middle; margin-left:4px;">`;
+          // If checkbox status is 1 (unchecked) or 2 (checked), add the icon with toggle behavior
+          if (this.checkbox === 1 || this.checkbox === 2) {
+            const img = document.createElement("img");
+            // Set image based on current checkbox status
+            img.src = (this.checkbox === 1) 
+                        ? "https://img.icons8.com/color/16/000000/unchecked-checkbox.png" 
+                        : "https://img.icons8.com/color/16/000000/checked-checkbox.png";
+            img.style.verticalAlign = "middle";
+            img.style.marginLeft = "4px";
+            img.addEventListener("click", (e) => {
+              e.stopPropagation();
+              // Toggle checkbox status
+              if (this.checkbox === 1) {
+                this.checkbox = 2;
+                img.src = "https://img.icons8.com/color/16/000000/checked-checkbox.png";
+              } else {
+                this.checkbox = 1;
+                img.src = "https://img.icons8.com/color/16/000000/unchecked-checkbox.png";
+              }
+              // Notify backend of the updated checkbox status
+              socket.emit("message", { 
+                action: "toggle_checkbox", 
+                year: currentYear, 
+                month: currentMonth, 
+                day: this.day, 
+                name: this.name, 
+                checkbox: this.checkbox
+              });
+            });
+            div.appendChild(img);
           }
         } else {
           // For remark records: use a lighter color version
@@ -284,7 +311,6 @@
           div.style.color = "";
           div.innerText = this.remark ? `${this.name} (${this.remark})` : this.name;
         }
-        
         // Common attributes
         div.setAttribute("data-day", this.day);
         div.setAttribute("data-name", this.name);
