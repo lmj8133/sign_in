@@ -20,7 +20,6 @@ else:
     }
 
 def save_data():
-    """Save the data_store to a JSON file."""
     with open(DATA_FILE, "w", encoding="utf-8") as f:
         json.dump(data_store, f, indent=4, ensure_ascii=False)
 
@@ -29,7 +28,20 @@ def get_date_key(year, month, day):
     Generate a date key in the format "YYYY-MM-DD".
     The month received from the frontend is zero-indexed, so add 1.
     """
-    return f"{year}-{int(month)+1:02d}-{int(day):02d}"
+
+def sort_names(names):
+    """
+    Sort the names so that entries starting with an ASCII letter (A-Z, a-z)
+    are sorted in a case-insensitive manner first,
+    then the remaining names (e.g. with non-ASCII characters) follow,
+    sorted in their default Unicode order.
+    Each item in the list is expected to be a dictionary with a "name" key.
+    """
+    english_names = [n for n in names if n.get("name", "") and n["name"][0].isascii() and n["name"][0].isalpha()]
+    non_english_names = [n for n in names if not (n.get("name", "") and n["name"][0].isascii() and n["name"][0].isalpha())]
+    english_names = sorted(english_names, key=lambda x: x["name"].lower())
+    non_english_names = sorted(non_english_names, key=lambda x: x["name"])
+    return english_names + non_english_names
 
 @socketio.on('connect')
 def handle_connect():
@@ -45,16 +57,23 @@ def handle_get_month_data(message):
     month_data = {key: val for key, val in data_store["checkins"].items() if key.startswith(month_prefix)}
     emit("month_data", month_data)
 
+@socketio.on('get_names')
+def handle_get_names():
+    emit("names_data", data_store["names"])
+
 @socketio.on('message')
 def handle_message(message):
     action = message.get("action")
     if action == "update_names":
         names = message.get("names", [])
+        names = sort_names(names)
         data_store["names"] = names
         print("Name list updated:", names)
         save_data()
+        # Emit the sorted names to update the front end immediately.
+        emit("names_data", names, broadcast=True)
         emit("message", {"info": "Name list updated"}, broadcast=True)
-        
+
     elif action == "checkin":
         year = message.get("year")
         month = message.get("month")
@@ -62,35 +81,53 @@ def handle_message(message):
         date_key = get_date_key(year, month, day)
         name = message.get("name")
         remark = message.get("remark", "")
-        # For checkin action, if remark is provided, default status to "remark", otherwise "checkin"
-        #status = "remark" if remark else "checkin"
-        status = "checkin"  # Force status to "checkin"
-        record = {"name": name, "remark": remark, "status": status}
+        status = "checkin"
+        hours = message.get("hours", 1)
+        record = {"name": name, "remark": remark, "status": status, "hours": hours}
         if date_key not in data_store["checkins"]:
             data_store["checkins"][date_key] = []
         # Update the record if it exists; otherwise, add a new record
         updated = False
+        old_hours = 0
+        current_record = None
         for rec in data_store["checkins"][date_key]:
             if isinstance(rec, dict) and rec.get("name") == name:
+                old_hours = rec.get("hours", 0)
                 rec["remark"] = remark
                 rec["status"] = status
+                rec["hours"] = hours
+                current_record = rec
                 updated = True
                 break
         if not updated:
             data_store["checkins"][date_key].append(record)
-        print(f"{name} checked in on {date_key} with remark: {remark}")
+            current_record = record
+
+        for u in data_store["names"]:
+            if u["name"] == name:
+                if updated:
+                    u["added_hours"] = u.get("added_hours", 0) + (hours - old_hours)
+                else:
+                    u["added_hours"] = u.get("added_hours", 0) + hours
+                if u["added_hours"] >= 4:
+                    current_record["checkbox"] = 1
+                    u["added_hours"] -= 4
+                else:
+                    current_record["checkbox"] = 0
+                break
+
+        print(f"{name} checked in on {date_key} with remark: {remark} and hours: {hours}")
         save_data()
-        emit("message", {"info": f"{name} checked in on {date_key}"}, broadcast=True)
-        
+        emit("message", {"info": f"{name} checked in on {date_key} (hours: {hours})"}, broadcast=True)
+
     elif action == "remark":
-        # New action for remark check-in
         year = message.get("year")
         month = message.get("month")
         day = message.get("day")
         date_key = get_date_key(year, month, day)
         name = message.get("name")
         remark = message.get("remark", "")
-        status = "remark"  # Force status to "remark"
+        status = "remark"
         record = {"name": name, "remark": remark, "status": status}
         if date_key not in data_store["checkins"]:
             data_store["checkins"][date_key] = []
@@ -106,7 +143,7 @@ def handle_message(message):
         print(f"{name} checked in with remark on {date_key}: {remark}")
         save_data()
         emit("message", {"info": f"{name} checked in with remark on {date_key}"}, broadcast=True)
-        
+
     elif action == "cancel":
         year = message.get("year")
         month = message.get("month")
@@ -116,20 +153,27 @@ def handle_message(message):
         if date_key in data_store["checkins"]:
             for record in data_store["checkins"][date_key]:
                 if isinstance(record, dict) and record.get("name") == name:
+                    if record.get("status") == "checkin" and "hours" in record:
+                        hrs = record["hours"]
+                        for u in data_store["names"]:
+                            if u["name"] == name:
+                                u["added_hours"] = u.get("added_hours", 0) - hrs
+                                if u["added_hours"] < 0:
+                                    u["added_hours"] = u.get("added_hours", 0) + 4
+                                break
                     data_store["checkins"][date_key].remove(record)
                     break
             print(f"{name}'s check-in on {date_key} canceled")
             save_data()
             emit("message", {"info": f"{name}'s check-in on {date_key} canceled"}, broadcast=True)
-            
+
     elif action == "toggle_status":
-        # Update record's status based on the value sent from frontend
         year = message.get("year")
         month = message.get("month")
         day = message.get("day")
         date_key = get_date_key(year, month, day)
         name = message.get("name")
-        new_status = message.get("status")  # Expected to be "checkin" or "remark"
+        new_status = message.get("status")
         if date_key in data_store["checkins"]:
             for record in data_store["checkins"][date_key]:
                 if isinstance(record, dict) and record.get("name") == name:
@@ -138,6 +182,7 @@ def handle_message(message):
                     save_data()
                     emit("message", {"info": f"Record for {name} on {date_key} toggled to {new_status} status"}, broadcast=True)
                     break
+
     elif action == "update_remark":
         year = message.get("year")
         month = message.get("month")
@@ -153,6 +198,23 @@ def handle_message(message):
                     save_data()
                     emit("message", {"info": f"Remark for {name} on {date_key} updated"}, broadcast=True)
                     break
+
+    elif action == "toggle_checkbox":
+        year = message.get("year")
+        month = message.get("month")
+        day = message.get("day")
+        date_key = get_date_key(year, month, day)
+        name = message.get("name")
+        checkbox = message.get("checkbox")
+        if date_key in data_store["checkins"]:
+            for record in data_store["checkins"][date_key]:
+                if isinstance(record, dict) and record.get("name") == name:
+                    record["checkbox"] = checkbox
+                    print(f"Checkbox for {name} on {date_key} toggled to {checkbox}")
+                    save_data()
+                    emit("message", {"info": f"Checkbox for {name} on {date_key} toggled to {checkbox}"}, broadcast=True)
+                    break
+
     else:
         print("Unknown action:", action)
 
