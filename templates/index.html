@@ -59,9 +59,9 @@
       padding: 5px;
       border: 1px solid #e0e0e0;
     }
-    /* Cells not in the current month are grayed out */
+    /* Dates outside the current month: background color set to #f0f0f0 */
     td.prev-month, td.next-month {
-      background-color: #e0e0e0;
+      background-color: #f0f0f0;
       color: #999;
       pointer-events: none;
     }
@@ -374,76 +374,101 @@
       nameList = data.names || [];
       checkinData = data.checkins || {};
       updateNameListDisplay();
-      loadCheckinsForMonth(currentYear, currentMonth);
+      loadCheckinsForMonth();
     });
     socket.on("month_data", (data) => {
       for (let key in data) {
         checkinData[key] = data[key];
       }
-      loadCheckinsForMonth(currentYear, currentMonth);
+      loadCheckinsForMonth();
     });
     
     function sendNameListUpdate() {
       socket.emit("message", { action: "update_names", names: nameList });
     }
     
+    // Global variables for calendar based on baseDate
+    let baseDate;
     let currentYear = (new Date()).getFullYear();
     let currentMonth = (new Date()).getMonth();
-    let currentDay = null;
     
-    function formatDateKey(year, month, day) {
-      return `${year}-${String(month+1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+    // Initialize baseDate to the Sunday before the first day of the current month
+    function initBaseDate() {
+      const today = new Date();
+      const firstOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
+      baseDate = new Date(firstOfMonth);
+      baseDate.setDate(firstOfMonth.getDate() - firstOfMonth.getDay());
     }
     
-    function generateCalendar(year, month) {
+    initBaseDate();
+    
+    // Helper: format a date as YYYY-MM-DD
+    function formatDateKey(date) {
+      const year = date.getFullYear();
+      const month = String(date.getMonth() + 1).padStart(2, '0');
+      const day = String(date.getDate()).padStart(2, '0');
+      return `${year}-${month}-${day}`;
+    }
+    
+    // Helper: check if a date is today
+    function isToday(date) {
       const today = new Date();
-      const todayKey = `${today.getFullYear()}-${String(today.getMonth()+1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
-      const firstDay = new Date(year, month, 1).getDay();
-      const daysInMonth = new Date(year, month + 1, 0).getDate();
-      let prevMonth = month - 1, prevYear = year;
-      if (prevMonth < 0) { prevMonth = 11; prevYear--; }
-      const daysInPrevMonth = new Date(prevYear, prevMonth + 1, 0).getDate();
-      let nextMonth = month + 1, nextYear = year;
-      if (nextMonth > 11) { nextMonth = 0; nextYear++; }
-      let totalCells = 42;
+      return date.getFullYear() === today.getFullYear() &&
+             date.getMonth() === today.getMonth() &&
+             date.getDate() === today.getDate();
+    }
+    
+    // Generate calendar based on baseDate (42 days, 6 weeks view)
+    function generateCalendar() {
       let calendarHTML = "<tr><th>Sun</th><th>Mon</th><th>Tue</th><th>Wed</th><th>Thu</th><th>Fri</th><th>Sat</th></tr>";
       
-      for (let cell = 0; cell < totalCells; cell++) {
-        if (cell % 7 === 0) { calendarHTML += "<tr>"; }
-        let cellContent = "";
-        let cellClass = "";
-        let dataDay = "";
-        let dateKey = "";
-        if (cell < firstDay) {
-          let dateNum = daysInPrevMonth - (firstDay - cell - 1);
-          cellContent = dateNum;
-          cellClass = "prev-month";
-          dateKey = formatDateKey(prevYear, prevMonth, dateNum);
-        } else if (cell < firstDay + daysInMonth) {
-          let dateNum = cell - firstDay + 1;
-          cellContent = dateNum;
-          cellClass = "current-month";
-          dataDay = dateNum;
-          dateKey = formatDateKey(year, month, dateNum);
-        } else {
-          let dateNum = cell - (firstDay + daysInMonth) + 1;
-          cellContent = dateNum;
-          cellClass = "next-month";
-          dateKey = formatDateKey(nextYear, nextMonth, dateNum);
+      // Determine the main month from the middle of the grid (day 22)
+      let middleDate = new Date(baseDate);
+      middleDate.setDate(baseDate.getDate() + 21);
+      currentYear = middleDate.getFullYear();
+      currentMonth = middleDate.getMonth();
+      
+      const monthStart = new Date(currentYear, currentMonth, 1);
+      const monthEnd = new Date(currentYear, currentMonth + 1, 0);
+      
+      let cellDate = new Date(baseDate);
+      
+      for (let cell = 0; cell < 42; cell++) {
+        if (cell % 7 === 0) {
+          calendarHTML += "<tr>";
         }
-        if (dateKey === todayKey) {
+        
+        let cellClass = "";
+        if (cellDate < monthStart) {
+          cellClass = "prev-month";
+        } else if (cellDate > monthEnd) {
+          cellClass = "next-month";
+        } else {
+          cellClass = "current-month";
+        }
+        if (isToday(cellDate)) {
           cellClass += " today";
         }
+        
+        let dateKey = formatDateKey(cellDate);
+        // Only assign data-day for current-month cells to enable check-in
+        let dataDay = (cellClass.includes("current-month")) ? cellDate.getDate() : "";
+        
         calendarHTML += `<td class="${cellClass}" data-date="${dateKey}" data-day="${dataDay}">
-                           <div class="date">${cellContent}</div>
+                           <div class="date">${cellDate.getDate()}</div>
                            <div class="checkins"></div>
                          </td>`;
-        if (cell % 7 === 6) { calendarHTML += "</tr>"; }
+        
+        if (cell % 7 === 6) {
+          calendarHTML += "</tr>";
+        }
+        
+        cellDate.setDate(cellDate.getDate() + 1);
       }
       
       document.getElementById("calendar").innerHTML = calendarHTML;
       updateCalendarCellEvents();
-      updateCalendarTitle(year, month);
+      updateCalendarTitle(currentYear, currentMonth);
       socket.emit("get_month_data", { year: currentYear, month: currentMonth });
     }
     
@@ -457,6 +482,7 @@
       document.querySelectorAll("#calendar td.current-month").forEach(td => {
         td.addEventListener("click", function(e) {
           currentDay = this.getAttribute("data-day");
+          if (!currentDay) return;
           if (nameList.length === 0) {
             alert("Please build the name list first.");
             return;
@@ -467,7 +493,7 @@
       });
     }
     
-    function loadCheckinsForMonth(year, month) {
+    function loadCheckinsForMonth() {
       document.querySelectorAll("#calendar td[data-date]").forEach(td => {
         let dateKey = td.getAttribute("data-date");
         let checkinsDiv = td.querySelector(".checkins");
@@ -525,25 +551,23 @@
       });
     }
     
-    generateCalendar(currentYear, currentMonth);
+    // Initialize calendar
+    generateCalendar();
     
-    window.addEventListener("wheel", function(e) {
-      if (e.deltaY < 0) {
-        currentMonth--;
-        if (currentMonth < 0) {
-          currentMonth = 11;
-          currentYear--;
-        }
-        generateCalendar(currentYear, currentMonth);
-      } else if (e.deltaY > 0) {
-        currentMonth++;
-        if (currentMonth > 11) {
-          currentMonth = 0;
-          currentYear++;
-        }
-        generateCalendar(currentYear, currentMonth);
+    // Add wheel event listener to calendar for week-based scrolling
+    document.getElementById("calendar").addEventListener("wheel", function(e) {
+      e.preventDefault();
+      if (e.deltaY > 0) {
+        // Scroll down: next week
+        baseDate.setDate(baseDate.getDate() + 7);
+      } else {
+        // Scroll up: previous week
+        baseDate.setDate(baseDate.getDate() - 7);
       }
+      generateCalendar();
     });
+    
+    let currentDay = null;
     
     function updateNameListDisplay() {
       const ul = document.getElementById("nameListUl");
