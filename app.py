@@ -24,10 +24,7 @@ def save_data():
         json.dump(data_store, f, indent=4, ensure_ascii=False)
 
 def get_date_key(year, month, day):
-    """
-    Generate a date key in the format "YYYY-MM-DD".
-    The month received from the frontend is zero-indexed, so add 1.
-    """
+    return f"{year}-{int(month)+1:02d}-{int(day):02d}"
 
 def sort_names(names):
     """
