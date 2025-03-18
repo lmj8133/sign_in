@@ -25,6 +25,20 @@ def save_data():
 def get_date_key(year, month, day):
     return f"{year}-{int(month)+1:02d}-{int(day):02d}"
 
+def sort_names(names):
+    """
+    Sort the names so that entries starting with an ASCII letter (A-Z, a-z)
+    are sorted in a case-insensitive manner first,
+    then the remaining names (e.g. with non-ASCII characters) follow,
+    sorted in their default Unicode order.
+    Each item in the list is expected to be a dictionary with a "name" key.
+    """
+    english_names = [n for n in names if n.get("name", "") and n["name"][0].isascii() and n["name"][0].isalpha()]
+    non_english_names = [n for n in names if not (n.get("name", "") and n["name"][0].isascii() and n["name"][0].isalpha())]
+    english_names = sorted(english_names, key=lambda x: x["name"].lower())
+    non_english_names = sorted(non_english_names, key=lambda x: x["name"])
+    return english_names + non_english_names
+
 @socketio.on('connect')
 def handle_connect():
     emit("initial_data", data_store)
@@ -46,9 +60,12 @@ def handle_message(message):
     action = message.get("action")
     if action == "update_names":
         names = message.get("names", [])
+        names = sort_names(names)
         data_store["names"] = names
         print("Name list updated:", names)
         save_data()
+        # Emit the sorted names to update the front end immediately.
+        emit("names_data", names, broadcast=True)
         emit("message", {"info": "Name list updated"}, broadcast=True)
 
     elif action == "checkin":
