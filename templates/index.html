@@ -3,7 +3,6 @@
 <head>
   <meta charset="UTF-8">
   <title>Attendance Sheet - Calendar</title>
-  <!-- Google Fonts (Roboto) -->
   <link href="https://fonts.googleapis.com/css2?family=Roboto&display=swap" rel="stylesheet">
   <style>
     body {
@@ -12,31 +11,17 @@
       margin: 0;
       padding: 20px;
     }
-
-    /*
-      Outer container: .calendar-wrapper
-      - Controls the overall calendar area (navigation + table)
-      - Sets max width and centers it
-    */
     .calendar-wrapper {
       width: 100%;
       max-width: 900px;
-      margin: 80px auto; /* originally the calendar table margin, now unified here */
+      margin: 80px auto;
     }
-
-    /*
-      Month navigation bar (#monthNavigation)
-      - Placed inside .calendar-wrapper
-      - justify-content: space-between to position left arrow, title, right arrow
-    */
     #monthNavigation {
       display: flex;
       align-items: center;
       justify-content: space-between;
-      margin-bottom: 10px; /* spacing between navigation bar and calendar table */
+      margin-bottom: 10px;
     }
-
-    /* Common arrow button style */
     .arrow-button {
       width: 40px;
       height: 40px;
@@ -52,8 +37,6 @@
     .arrow-button:hover {
       background-color: #1558b0;
     }
-
-    /* Left arrow (using CSS border trick) */
     .arrow-button.left::before {
       content: "";
       display: inline-block;
@@ -61,10 +44,8 @@
       height: 0;
       border-top: 6px solid transparent;
       border-bottom: 6px solid transparent;
-      border-left: 6px solid #fff; /* arrow pointing left */
+      border-left: 6px solid #fff;
     }
-
-    /* Right arrow */
     .arrow-button.right::before {
       content: "";
       display: inline-block;
@@ -72,10 +53,8 @@
       height: 0;
       border-top: 6px solid transparent;
       border-bottom: 6px solid transparent;
-      border-right: 6px solid #fff; /* arrow pointing right */
+      border-right: 6px solid #fff;
     }
-
-    /* Fixed "Build Name List" button at top-right */
     #buildNameListButton {
       position: fixed;
       top: 20px;
@@ -92,8 +71,6 @@
     #buildNameListButton:hover {
       background-color: #1558b0;
     }
-
-    /* Calendar table style */
     table {
       width: 100%;
       background: white;
@@ -116,7 +93,6 @@
       padding: 5px;
       border: 1px solid #e0e0e0;
     }
-    /* Dates not in the current month */
     td.prev-month, td.next-month {
       background-color: #f0f0f0;
       color: #999;
@@ -144,13 +120,10 @@
       overflow: hidden;
       text-overflow: ellipsis;
     }
-    /* Highlight today's cell */
     td.today {
       border: 2px solid #FF5722;
       box-shadow: inset 0 0 10px rgba(255,87,34,0.5);
     }
-
-    /* Modal styles */
     .modal {
       display: none;
       position: fixed;
@@ -225,38 +198,27 @@
   <script src="https://cdn.socket.io/4.0.1/socket.io.min.js"></script>
 </head>
 <body>
-  <!-- Outer container for the calendar -->
   <div class="calendar-wrapper">
-    <!-- Month navigation bar -->
     <div id="monthNavigation">
-      <!-- According to your fix: prevMonthButton uses the right arrow -->
       <button id="prevMonthButton" class="arrow-button right"></button>
-      <!-- Calendar title -->
       <h1 id="calendarTitle" style="margin: 0;">Attendance Sheet - Calendar</h1>
-      <!-- nextMonthButton uses the left arrow -->
       <button id="nextMonthButton" class="arrow-button left"></button>
     </div>
-
-    <!-- Calendar table -->
-    <table id="calendar">
-      <!-- Dynamically generated -->
-    </table>
+    <table id="calendar"></table>
   </div>
   
-  <!-- Fixed button at top-right for building name list -->
   <button id="buildNameListButton">Build Name List</button>
   
-  <!-- Modal: Build name list -->
   <div id="nameListModal" class="modal">
     <div class="modal-content">
       <p>Enter a name to add to the list:</p>
       <div class="field-row">
         <label for="newNameInput">Name:</label>
-        <input id="newNameInput" type="text" placeholder="Please enter name">
+        <input id="newNameInput" type="text" placeholder="Enter name">
       </div>
       <div class="field-row">
         <label for="tuitionInput">Tuition:</label>
-        <input id="tuitionInput" type="text" placeholder="Please enter tuition" value="3000">
+        <input id="tuitionInput" type="text" placeholder="Enter tuition" value="3000">
       </div>
       <div class="modal-buttons">
         <button id="addNameButton" style="background:#34a853; color:white;">Add To List</button>
@@ -269,7 +231,6 @@
     </div>
   </div>
   
-  <!-- Modal: Check-in selection -->
   <div id="checkinModal" class="modal">
     <div class="modal-content">
       <p>Select a name to check in for this day:</p>
@@ -279,7 +240,7 @@
       </div>
       <div class="field-row">
         <label for="checkinRemark">Remark:</label>
-        <input id="checkinRemark" type="text" placeholder="Please enter remark (optional)">
+        <input id="checkinRemark" type="text" placeholder="Enter remark (optional)">
       </div>
       <div class="field-row">
         <label for="checkinHours">Hours:</label>
@@ -293,17 +254,16 @@
     </div>
   </div>
   
-  <!-- Modal: Edit check-in record -->
   <div id="editRecordModal" class="modal">
     <div class="modal-content">
       <p>Edit Check-in Record</p>
       <div class="field-row">
         <label for="editRemarkInput">Remark:</label>
-        <input id="editRemarkInput" type="text" placeholder="Please enter remark (optional)">
+        <input id="editRemarkInput" type="text" placeholder="Enter remark (optional)">
       </div>
       <div class="field-row">
         <label for="editHoursInput">Hours:</label>
-        <input id="editHoursInput" type="number" placeholder="Please enter hours" value="1" min="1" step="0.5">
+        <input id="editHoursInput" type="number" placeholder="Enter hours" value="1" min="1" step="0.5">
       </div>
       <div class="modal-buttons">
         <button id="confirmEditCheckin" style="background:#34a853; color:white;">Check In</button>
@@ -313,7 +273,6 @@
     </div>
   </div>
   
-  <!-- Modal: Remove check-in record -->
   <div id="removeRecordModal" class="modal">
     <div class="modal-content">
       <p id="removeRecordModalTitle">Remove Record</p>
@@ -325,13 +284,11 @@
   </div>
   
   <script>
-    // Helper: get total added hours for a given user
     function getUserAddedHours(name) {
       let user = nameList.find(u => u.name === name);
       return user ? user.added_hours : 0;
     }
     
-    // djb2 algorithm: compute color from a given name
     function getColorFromName(name) {
       let hash = 5381;
       for (let i = 0; i < name.length; i++) {
@@ -341,7 +298,6 @@
       return `hsl(${hue}, 90%, 60%)`;
     }
     
-    // Get a lighter version of an HSL color string
     function getLighterColor(hslString) {
       const regex = /hsl\((\d+),\s*(\d+)%\s*,\s*(\d+)%\)/;
       const result = regex.exec(hslString);
@@ -359,7 +315,6 @@
     let checkinData = {};
     let editTarget = null;
     
-    // CheckinRecord class: stores name, day, remark, status, hours, and checkbox
     class CheckinRecord {
       static colorMapping = {};
       constructor(name, day, remark = "", status = null, hours = null, checkbox = 0) {
@@ -368,7 +323,7 @@
         this.remark = remark;
         this.status = status ? status : (remark ? "remark" : "checkin");
         this.hours = hours !== null ? parseFloat(hours) : null;
-        this.checkbox = checkbox; // 0 (none), 1 (unchecked), 2 (checked)
+        this.checkbox = checkbox;
         if (CheckinRecord.colorMapping[name]) {
           this.color = CheckinRecord.colorMapping[name];
         } else {
@@ -453,17 +408,19 @@
       }
       loadCheckinsForMonth();
     });
+    socket.on("names_data", (data) => {
+      nameList = data;
+      updateNameListDisplay();
+    });
     
     function sendNameListUpdate() {
       socket.emit("message", { action: "update_names", names: nameList });
     }
     
-    // Global variables
     let baseDate;
     let currentYear = (new Date()).getFullYear();
     let currentMonth = (new Date()).getMonth();
     
-    // Initialize baseDate to the Sunday before the first day of the current month
     function initBaseDate() {
       const today = new Date();
       const firstOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
@@ -472,7 +429,6 @@
     }
     initBaseDate();
     
-    // Helper: format a date as YYYY-MM-DD
     function formatDateKey(date) {
       const year = date.getFullYear();
       const month = String(date.getMonth() + 1).padStart(2, '0');
@@ -480,7 +436,6 @@
       return `${year}-${month}-${day}`;
     }
     
-    // Check if a date is today
     function isToday(date) {
       const today = new Date();
       return date.getFullYear() === today.getFullYear() &&
@@ -488,11 +443,9 @@
              date.getDate() === today.getDate();
     }
     
-    // Generate a 42-day (6-week) calendar based on baseDate
     function generateCalendar() {
       let calendarHTML = "<tr><th>Sun</th><th>Mon</th><th>Tue</th><th>Wed</th><th>Thu</th><th>Fri</th><th>Sat</th></tr>";
       
-      // Use the 22nd day in the grid to determine the main month
       let middleDate = new Date(baseDate);
       middleDate.setDate(baseDate.getDate() + 21);
       currentYear = middleDate.getFullYear();
@@ -521,7 +474,6 @@
         }
         
         let dateKey = formatDateKey(cellDate);
-        // Only set data-day for current-month cells
         let dataDay = (cellClass.includes("current-month")) ? cellDate.getDate() : "";
         
         calendarHTML += `<td class="${cellClass}" data-date="${dateKey}" data-day="${dataDay}">
@@ -584,7 +536,6 @@
               let tuition = userRecord ? userRecord.tuition : "";
               let currentStatus = this.getAttribute("data-status");
               if (currentStatus === "checkin") {
-                // Open remove record modal
                 let removeModal = document.getElementById("removeRecordModal");
                 removeModal.querySelector("p").innerText = "Remove Record - " + personName + " (" + tuition + ")";
                 document.getElementById("confirmRemoveRecord").onclick = () => {
@@ -603,7 +554,6 @@
                 };
                 removeModal.style.display = "block";
               } else {
-                // Open edit record modal
                 let editModal = document.getElementById("editRecordModal");
                 editTarget = this;
                 editModal.querySelector("p").innerText = "Edit Check-in Record - " + personName + " (" + tuition + ")";
@@ -619,10 +569,8 @@
       });
     }
     
-    // Initialize the calendar
     generateCalendar();
     
-    // Add wheel event to the calendar (scroll by week)
     document.getElementById("calendar").addEventListener("wheel", function(e) {
       e.preventDefault();
       if (e.deltaY > 0) {
@@ -656,7 +604,7 @@
     
     document.getElementById("buildNameListButton").addEventListener("click", function() {
       document.getElementById("nameListModal").style.display = "block";
-      updateNameListDisplay();
+      socket.emit("get_names");
     });
     
     document.getElementById("addNameButton").addEventListener("click", function() {
@@ -745,7 +693,6 @@
       currentDay = null;
     });
     
-    // For editing record (non-checkin status)
     document.getElementById("confirmEditCheckin").addEventListener("click", function() {
       if (editTarget) {
         const name = editTarget.getAttribute("data-name");
@@ -794,7 +741,6 @@
       editTarget = null;
     });
     
-    // Arrow buttons: switch month
     document.getElementById("prevMonthButton").addEventListener("click", function() {
       const newFirstOfMonth = new Date(currentYear, currentMonth - 1, 1);
       newFirstOfMonth.setDate(newFirstOfMonth.getDate() - newFirstOfMonth.getDay());
