@@ -148,6 +148,22 @@
     ul li:hover {
       background: #e8eaed;
     }
+    /* Arrange labels and fields side by side */
+    .field-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 10px;
+    }
+    .field-row label {
+      width: 60px;
+      text-align: right;
+      font-size: 14px;
+      color: #202124;
+    }
+    .field-row input, .field-row select {
+      flex: 1;
+    }
   </style>
   <script src="https://cdn.socket.io/4.0.1/socket.io.min.js"></script>
 </head>
@@ -163,7 +179,14 @@
   <div id="nameListModal" class="modal">
     <div class="modal-content">
       <p>Enter a name to add to the list:</p>
-      <input id="newNameInput" type="text" placeholder="Name">
+      <div class="field-row">
+        <label for="newNameInput">Name:</label>
+        <input id="newNameInput" type="text" placeholder="Please enter name">
+      </div>
+      <div class="field-row">
+        <label for="tuitionInput">Tuition:</label>
+        <input id="tuitionInput" type="text" placeholder="Please enter tuition" value="3000">
+      </div>
       <div class="modal-buttons">
         <button id="addNameButton" style="background:#34a853; color:white;">Add Name</button>
         <button id="closeNameListModal" style="background:#ea4335; color:white;">Close</button>
@@ -179,9 +202,18 @@
   <div id="checkinModal" class="modal">
     <div class="modal-content">
       <p>Select a name to check in for this day:</p>
-      <select id="checkinNameSelect"></select>
-      <input id="checkinRemark" type="text" placeholder="Remark (optional)">
-      <input id="checkinHours" type="text" placeholder="Hours" value="1">
+      <div class="field-row">
+        <label for="checkinNameSelect">Name:</label>
+        <select id="checkinNameSelect"></select>
+      </div>
+      <div class="field-row">
+        <label for="checkinRemark">Remark:</label>
+        <input id="checkinRemark" type="text" placeholder="Please enter remark (optional)">
+      </div>
+      <div class="field-row">
+        <label for="checkinHours">Hours:</label>
+        <input id="checkinHours" type="text" placeholder="1" value="1">
+      </div>
       <div class="modal-buttons">
         <button id="confirmCheckin" style="background:#34a853; color:white;">Check In</button>
         <button id="remarkButton" style="background:#1a73e8; color:white;">Remark</button>
@@ -190,12 +222,18 @@
     </div>
   </div>
   
-  <!-- Modal for editing a check-in record (update remark and hours, cancel record) -->
+  <!-- Modal for editing a check-in record -->
   <div id="editRecordModal" class="modal">
     <div class="modal-content">
       <p>Edit Check-in Record</p>
-      <input id="editRemarkInput" type="text" placeholder="Remark (optional)">
-      <input id="editHoursInput" type="number" placeholder="Hours" value="1" min="1" step="0.5">
+      <div class="field-row">
+        <label for="editRemarkInput">Remark:</label>
+        <input id="editRemarkInput" type="text" placeholder="Please enter remark (optional)">
+      </div>
+      <div class="field-row">
+        <label for="editHoursInput">Hours:</label>
+        <input id="editHoursInput" type="number" placeholder="Please enter hours" value="1" min="1" step="0.5">
+      </div>
       <div class="modal-buttons">
         <button id="confirmEditCheckin" style="background:#34a853; color:white;">Check In</button>
         <button id="cancelRecordButton" style="background:#ea4335; color:white;">Cancel Record</button>
@@ -248,7 +286,7 @@
         this.remark = remark;
         this.status = status ? status : (remark ? "remark" : "checkin");
         this.hours = hours !== null ? parseFloat(hours) : null;
-        this.checkbox = checkbox; // checkbox status: 0 (none), 1 (unchecked), 2 (checked)
+        this.checkbox = checkbox; // 0 (none), 1 (unchecked), 2 (checked)
         if (CheckinRecord.colorMapping[name]) {
           this.color = CheckinRecord.colorMapping[name];
         } else {
@@ -260,8 +298,6 @@
       render() {
         const div = document.createElement("div");
         div.className = "checkin";
-        
-        // For checkin records: display name(remark)[hours]
         if (this.status === "checkin") {
           div.style.backgroundColor = this.color;
           div.style.color = "black";
@@ -270,13 +306,11 @@
             text += `(${this.remark})`;
           }
           if (this.hours !== null) {
-            text += `[${this.hours}]`;
+            text += `[${this.hours} hr]`;
           }
           div.innerHTML = text;
-          // If checkbox status is 1 (unchecked) or 2 (checked), add the icon with toggle behavior
           if (this.checkbox === 1 || this.checkbox === 2) {
             const img = document.createElement("img");
-            // Set image based on current checkbox status
             img.src = (this.checkbox === 1) 
                         ? "https://img.icons8.com/color/16/000000/unchecked-checkbox.png" 
                         : "https://img.icons8.com/color/16/000000/checked-checkbox.png";
@@ -284,7 +318,6 @@
             img.style.marginLeft = "4px";
             img.addEventListener("click", (e) => {
               e.stopPropagation();
-              // Toggle checkbox status
               if (this.checkbox === 1) {
                 this.checkbox = 2;
                 img.src = "https://img.icons8.com/color/16/000000/checked-checkbox.png";
@@ -292,7 +325,6 @@
                 this.checkbox = 1;
                 img.src = "https://img.icons8.com/color/16/000000/unchecked-checkbox.png";
               }
-              // Notify backend of the updated checkbox status
               socket.emit("message", { 
                 action: "toggle_checkbox", 
                 year: currentYear, 
@@ -305,13 +337,11 @@
             div.appendChild(img);
           }
         } else {
-          // For remark records: use a lighter color version
           const lighter = getLighterColor(this.color);
           div.style.backgroundColor = lighter;
           div.style.color = "";
           div.innerText = this.remark ? `${this.name} (${this.remark})` : this.name;
         }
-        // Common attributes
         div.setAttribute("data-day", this.day);
         div.setAttribute("data-name", this.name);
         div.setAttribute("data-remark", this.remark);
@@ -320,14 +350,12 @@
       }
     }
     
-    // Connect to backend using socket.io
     const socket = io();
     socket.on("connect", () => {
       console.log("Socket.IO connection established");
     });
     socket.on("message", (data) => {
       console.log("Message received:", data);
-      // Request updated month data to refresh the calendar UI
       socket.emit("get_month_data", { year: currentYear, month: currentMonth });
       updateNameListDisplay();
     });
@@ -338,7 +366,6 @@
       loadCheckinsForMonth(currentYear, currentMonth);
     });
     socket.on("month_data", (data) => {
-      // Merge incoming month_data with current checkinData and re-render
       for (let key in data) {
         checkinData[key] = data[key];
       }
@@ -360,7 +387,6 @@
     function generateCalendar(year, month) {
       const today = new Date();
       const todayKey = `${today.getFullYear()}-${String(today.getMonth()+1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
-      
       const firstDay = new Date(year, month, 1).getDay();
       const daysInMonth = new Date(year, month + 1, 0).getDate();
       let prevMonth = month - 1, prevYear = year;
@@ -368,7 +394,6 @@
       const daysInPrevMonth = new Date(prevYear, prevMonth + 1, 0).getDate();
       let nextMonth = month + 1, nextYear = year;
       if (nextMonth > 11) { nextMonth = 0; nextYear++; }
-      
       let totalCells = 42;
       let calendarHTML = "<tr><th>Sun</th><th>Mon</th><th>Tue</th><th>Wed</th><th>Thu</th><th>Fri</th><th>Sat</th></tr>";
       
@@ -450,11 +475,13 @@
               let editModal = document.getElementById("editRecordModal");
               editTarget = this;
               let personName = this.getAttribute("data-name");
-              editModal.querySelector("p").innerText = "Edit " + personName + "'s Check-in Record";
-              document.getElementById("editRemarkInput").value = this.getAttribute("data-remark");
-              const currentHours = this.innerHTML.match(/\[(.*?)\]/);
-              document.getElementById("editHoursInput").value = currentHours ? currentHours[1] : 1;
-              editModal.style.display = "block";
+                let userRecord = nameList.find(u => u.name === personName);
+                let tuition = userRecord ? userRecord.tuition : "";
+                editModal.querySelector("p").innerText = personName + " [" + tuition + "]";
+                document.getElementById("editRemarkInput").value = this.getAttribute("data-remark");
+                const currentHours = this.innerHTML.match(/\[(.*?)\]/);
+                document.getElementById("editHoursInput").value = currentHours ? currentHours[1] : 1;
+                editModal.style.display = "block";
             });
             checkinsDiv.appendChild(checkinDiv);
           });
@@ -487,7 +514,7 @@
       ul.innerHTML = "";
       nameList.forEach(user => {
         const li = document.createElement("li");
-        li.innerText = `${user.name} (${user.added_hours} hrs)`;
+        li.innerText = `${user.name} - ${user.added_hours} hrs`;
         li.style.backgroundColor = CheckinRecord.colorMapping[user.name] || "#ffffff";
         li.addEventListener("click", function() {
           if (confirm("Do you want to delete " + user.name + " from the list?")) {
@@ -508,8 +535,9 @@
     
     document.getElementById("addNameButton").addEventListener("click", function() {
       const newName = document.getElementById("newNameInput").value.trim();
+      const tuition = document.getElementById("tuitionInput").value.trim();
       if (newName && !nameList.some(u => u.name === newName)) {
-        nameList.push({name: newName, added_hours: 0});
+        nameList.push({name: newName, added_hours: 0, tuition: tuition});
         if (!CheckinRecord.colorMapping[newName]) {
           CheckinRecord.colorMapping[newName] = getColorFromName(newName);
         }
@@ -517,6 +545,7 @@
         sendNameListUpdate();
       }
       document.getElementById("newNameInput").value = "";
+      document.getElementById("tuitionInput").value = "";
     });
     
     document.getElementById("closeNameListModal").addEventListener("click", function() {
@@ -590,7 +619,6 @@
       currentDay = null;
     });
     
-    // Edit modal: confirm check-in update (including hours)
     document.getElementById("confirmEditCheckin").addEventListener("click", function() {
       let editModal = document.getElementById("editRecordModal");
       if (editTarget) {
@@ -612,7 +640,6 @@
       editTarget = null;
     });
     
-    // Edit modal: cancel record removal
     document.getElementById("cancelRecordButton").addEventListener("click", function() {
       let editModal = document.getElementById("editRecordModal");
       if (editTarget) {
