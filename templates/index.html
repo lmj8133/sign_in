@@ -602,11 +602,14 @@
       });
     }
     
+    // When the build button is clicked, open the modal and reset the tuition input to "3000"
     document.getElementById("buildNameListButton").addEventListener("click", function() {
       document.getElementById("nameListModal").style.display = "block";
+      document.getElementById("tuitionInput").value = "3000";
       socket.emit("get_names");
     });
     
+    // When adding a new name, clear the name input and reset the tuition to "3000"
     document.getElementById("addNameButton").addEventListener("click", function() {
       const newName = document.getElementById("newNameInput").value.trim();
       const tuition = document.getElementById("tuitionInput").value.trim();
@@ -619,7 +622,7 @@
         sendNameListUpdate();
       }
       document.getElementById("newNameInput").value = "";
-      document.getElementById("tuitionInput").value = "";
+      document.getElementById("tuitionInput").value = "3000";
     });
     
     document.getElementById("closeNameListModal").addEventListener("click", function() {
