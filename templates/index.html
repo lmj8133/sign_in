@@ -188,16 +188,16 @@
         <input id="tuitionInput" type="text" placeholder="Please enter tuition" value="3000">
       </div>
       <div class="modal-buttons">
-        <button id="addNameButton" style="background:#34a853; color:white;">Add Name</button>
+        <button id="addNameButton" style="background:#34a853; color:white;">Add To List</button>
         <button id="closeNameListModal" style="background:#ea4335; color:white;">Close</button>
       </div>
       <div id="nameListDisplay" style="margin-top:10px;">
-        <p>Current Names (click to delete):</p>
+        <p>List (click to delete):</p>
         <ul id="nameListUl"></ul>
       </div>
     </div>
   </div>
-
+  
   <!-- Modal for check-in selection -->
   <div id="checkinModal" class="modal">
     <div class="modal-content">
@@ -222,7 +222,7 @@
     </div>
   </div>
   
-  <!-- Modal for editing a check-in record -->
+  <!-- Modal for editing a check-in record (for remark editing) -->
   <div id="editRecordModal" class="modal">
     <div class="modal-content">
       <p>Edit Check-in Record</p>
@@ -238,6 +238,17 @@
         <button id="confirmEditCheckin" style="background:#34a853; color:white;">Check In</button>
         <button id="cancelRecordButton" style="background:#ea4335; color:white;">Cancel Record</button>
         <button id="closeEditRecordModal" style="background:#5f6368; color:white;">Close</button>
+      </div>
+    </div>
+  </div>
+  
+  <!-- Modal for removing a check-in record (for checkin state only) -->
+  <div id="removeRecordModal" class="modal">
+    <div class="modal-content">
+      <p id="removeRecordModalTitle">Remove Record</p>
+      <div class="modal-buttons">
+        <button id="confirmRemoveRecord" style="background:#ea4335; color:white;">Remove Record</button>
+        <button id="cancelRemoveRecord" style="background:#5f6368; color:white;">Cancel</button>
       </div>
     </div>
   </div>
@@ -472,16 +483,41 @@
             let checkinDiv = checkinRecord.render();
             checkinDiv.addEventListener("click", function(e) {
               e.stopPropagation();
-              let editModal = document.getElementById("editRecordModal");
-              editTarget = this;
               let personName = this.getAttribute("data-name");
-                let userRecord = nameList.find(u => u.name === personName);
-                let tuition = userRecord ? userRecord.tuition : "";
-                editModal.querySelector("p").innerText = personName + " [" + tuition + "]";
+              let userRecord = nameList.find(u => u.name === personName);
+              let tuition = userRecord ? userRecord.tuition : "";
+              let currentStatus = this.getAttribute("data-status");
+              if (currentStatus === "checkin") {
+                // Open remove record modal
+                let removeModal = document.getElementById("removeRecordModal");
+                removeModal.querySelector("p").innerText = "Remove Record - " + personName + " (" + tuition + ")";
+                // Confirm removal
+                document.getElementById("confirmRemoveRecord").onclick = () => {
+                  let dayVal = this.getAttribute("data-day");
+                  socket.emit("message", {
+                    action: "cancel",
+                    year: currentYear,
+                    month: currentMonth,
+                    day: dayVal,
+                    name: personName
+                  });
+                  removeModal.style.display = "none";
+                };
+                // Cancel removal
+                document.getElementById("cancelRemoveRecord").onclick = () => {
+                  removeModal.style.display = "none";
+                };
+                removeModal.style.display = "block";
+              } else {
+                // Open edit record modal for remark editing
+                let editModal = document.getElementById("editRecordModal");
+                editTarget = this;
+                editModal.querySelector("p").innerText = "Edit Check-in Record - " + personName + " (" + tuition + ")";
                 document.getElementById("editRemarkInput").value = this.getAttribute("data-remark");
                 const currentHours = this.innerHTML.match(/\[(.*?)\]/);
                 document.getElementById("editHoursInput").value = currentHours ? currentHours[1] : 1;
                 editModal.style.display = "block";
+              }
             });
             checkinsDiv.appendChild(checkinDiv);
           });
@@ -619,29 +655,31 @@
       currentDay = null;
     });
     
+    // For editing record (non-checkin status)
     document.getElementById("confirmEditCheckin").addEventListener("click", function() {
-      let editModal = document.getElementById("editRecordModal");
       if (editTarget) {
-        const newRemark = document.getElementById("editRemarkInput").value.trim();
-        const newHours = parseFloat(document.getElementById("editHoursInput").value) || 1;
         const name = editTarget.getAttribute("data-name");
         const day = editTarget.getAttribute("data-day");
-        socket.emit("message", { 
-          action: "checkin", 
-          year: currentYear, 
-          month: currentMonth, 
-          day: day, 
-          name: name, 
-          remark: newRemark,
-          hours: newHours
-        });
+        const currentStatus = editTarget.getAttribute("data-status");
+        const newRemark = document.getElementById("editRemarkInput").value.trim();
+        if (currentStatus !== "checkin") {
+          const newHours = parseFloat(document.getElementById("editHoursInput").value) || 1;
+          socket.emit("message", { 
+            action: "checkin", 
+            year: currentYear, 
+            month: currentMonth, 
+            day: day, 
+            name: name, 
+            remark: newRemark,
+            hours: newHours
+          });
+        }
       }
       document.getElementById("editRecordModal").style.display = "none";
       editTarget = null;
     });
     
     document.getElementById("cancelRecordButton").addEventListener("click", function() {
-      let editModal = document.getElementById("editRecordModal");
       if (editTarget) {
         const day = editTarget.getAttribute("data-day");
         const name = editTarget.getAttribute("data-name");
@@ -662,9 +700,9 @@
     
     document.getElementById("closeEditRecordModal").addEventListener("click", function() {
       document.getElementById("editRecordModal").style.display = "none";
+      document.getElementById("confirmEditCheckin").style.display = "inline-block";
       editTarget = null;
     });
-    
   </script>
 </body>
 </html>
