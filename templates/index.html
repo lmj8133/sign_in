@@ -606,13 +606,78 @@
         const li = document.createElement("li");
         li.innerText = `${user.name} - ${user.added_hours} hrs`;
         li.style.backgroundColor = CheckinRecord.colorMapping[user.name] || "#ffffff";
-        li.addEventListener("click", function() {
-          if (confirm(`Do you want to delete ${user.name} from the list?`)) {
-            nameList = nameList.filter(u => u.name !== user.name);
-            delete CheckinRecord.colorMapping[user.name];
-            updateNameListDisplay();
-            sendNameListUpdate();
-          }
+        li.addEventListener("click", function(e) {
+          e.stopPropagation();
+          // Show options in a context menu style
+          const options = document.createElement("div");
+          options.style.position = "absolute";
+          options.style.backgroundColor = "white";
+          options.style.border = "1px solid #ccc";
+          options.style.borderRadius = "4px";
+          options.style.padding = "5px";
+          options.style.boxShadow = "0 2px 5px rgba(0,0,0,0.2)";
+          options.style.zIndex = "1002";
+          
+          const checkInOption = document.createElement("div");
+          checkInOption.innerText = "Check In Today";
+          checkInOption.style.padding = "8px 12px";
+          checkInOption.style.cursor = "pointer";
+          checkInOption.style.borderBottom = "1px solid #eee";
+          checkInOption.addEventListener("click", function() {
+            // Set current day to today's date
+            const today = new Date();
+            currentDay = today.getDate().toString();
+            
+            // Pre-select this user in the dropdown
+            populateCheckinDropdown();
+            document.getElementById("checkinNameSelect").value = user.name;
+            
+            // Show the check-in modal
+            document.getElementById("checkinModal").style.display = "block";
+            
+            // Remove the options menu
+            if (options.parentNode) {
+              options.parentNode.removeChild(options);
+            }
+          });
+          options.appendChild(checkInOption);
+          
+          const deleteOption = document.createElement("div");
+          deleteOption.innerText = "Delete From List";
+          deleteOption.style.padding = "8px 12px";
+          deleteOption.style.cursor = "pointer";
+          deleteOption.style.color = "#ea4335";
+          deleteOption.addEventListener("click", function() {
+            if (confirm(`Do you want to delete ${user.name} from the list?`)) {
+              nameList = nameList.filter(u => u.name !== user.name);
+              delete CheckinRecord.colorMapping[user.name];
+              updateNameListDisplay();
+              sendNameListUpdate();
+            }
+            // Remove the options menu
+            if (options.parentNode) {
+              options.parentNode.removeChild(options);
+            }
+          });
+          options.appendChild(deleteOption);
+          
+          // Position the options menu near the clicked element
+          document.body.appendChild(options);
+          options.style.left = `${e.pageX}px`;
+          options.style.top = `${e.pageY}px`;
+          
+          // Close the menu when clicking elsewhere
+          const closeMenu = function(e) {
+            if (!options.contains(e.target) && e.target !== li) {
+              if (options.parentNode) {
+                options.parentNode.removeChild(options);
+              }
+              document.removeEventListener("click", closeMenu);
+            }
+          };
+          setTimeout(() => {
+            document.addEventListener("click", closeMenu);
+          }, 0);
         });
         ul.appendChild(li);
       });
@@ -660,7 +725,31 @@
       const selectedName = document.getElementById("checkinNameSelect").value;
       const remark = document.getElementById("checkinRemark").value.trim();
       const hours = parseFloat(document.getElementById("checkinHours").value) || 1;
+      
+      // If currentDay is not set (when coming from name list), use today's date
+      if (!currentDay) {
+        const today = new Date();
+        currentDay = today.getDate().toString();
+      }
+      
       if (selectedName && currentDay) {
+        // Check if the user has already checked in for today
+        const today = new Date();
+        const todayKey = formatDateKey(today);
+        const alreadyCheckedIn = checkinData[todayKey] && 
+          checkinData[todayKey].some(record => 
+            (typeof record === 'object' ? record.name : record) === selectedName
+          );
+          
+        if (alreadyCheckedIn) {
+          alert("This person has already checked in for today.");
+          document.getElementById("checkinModal").style.display = "none";
+          document.getElementById("checkinRemark").value = "";
+          document.getElementById("checkinHours").value = 1;
+          currentDay = null;
+          return;
+        }
+        
         socket.emit("message", { 
           action: "checkin", 
           year: currentYear, 
