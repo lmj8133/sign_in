@@ -400,6 +400,9 @@
         div.setAttribute("data-name", this.name);
         div.setAttribute("data-remark", this.remark);
         div.setAttribute("data-status", this.status);
+        if (this.hours !== null) {
+          div.setAttribute("data-hours", this.hours);
+        }
         return div;
       }
     }
@@ -578,7 +581,17 @@
                 editTarget = this;
                 editModal.querySelector("p").innerText = "Edit Check-in Record - " + personName + " (" + tuition + ")";
                 document.getElementById("editRemarkInput").value = this.getAttribute("data-remark");
-                const currentHours = this.innerHTML.match(/\[(.*?)\]/);
+                // Extract hours from the innerHTML, looking for the pattern [X hr].
+                // If not found, try to get it from the record object in checkinData
+                // Get the hours value from the data attribute if it exists, otherwise try to extract from innerHTML
+                let currentHours = null;
+                // First check if we have a data attribute for hours
+                if (this.getAttribute("data-hours")) {
+                  currentHours = [null, this.getAttribute("data-hours")];
+                } else {
+                  // Otherwise try to extract from the innerHTML
+                  currentHours = this.innerHTML.match(/\[(.*?) hr\]/);
+                }
                 document.getElementById("editHoursInput").value = currentHours ? currentHours[1] : 1;
                 editModal.style.display = "block";
               }
@@ -912,6 +925,8 @@
       generateCalendar();
     });
     document.getElementById("showListButton").addEventListener("click", function() {
+      // Request updated name list data from the server before showing the modal
+      socket.emit("get_names");
       document.getElementById("showListModal").style.display = "block";
     });
     document.getElementById("closeShowListModal").addEventListener("click", function() {
