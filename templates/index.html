@@ -213,6 +213,7 @@
   </div>
   
   <button id="buildNameListButton">Build Name List</button>
+  <button id="showListButton" style="position: fixed; top: 70px; right: 20px; background-color: #1a73e8; color: white; border: none; border-radius: 4px; padding: 10px 16px; cursor: pointer; box-shadow: 0 1px 2px rgba(0,0,0,0.2); z-index: 1001;">Show List</button>
   
   <div id="nameListModal" class="modal">
     <div class="modal-content">
@@ -229,9 +230,17 @@
         <button id="addNameButton" style="background:#34a853; color:white;">Add To List</button>
         <button id="closeNameListModal" style="background:#ea4335; color:white;">Close</button>
       </div>
+    </div>
+  </div>
+  
+  <div id="showListModal" class="modal">
+    <div class="modal-content">
+      <p>Name List (click to delete):</p>
       <div id="nameListDisplay" style="margin-top:10px;">
-        <p>List (click to delete):</p>
         <ul id="nameListUl"></ul>
+      </div>
+      <div class="modal-buttons">
+        <button id="closeShowListModal" style="background:#5f6368; color:white;">Close</button>
       </div>
     </div>
   </div>
@@ -762,6 +771,12 @@
       newFirstOfMonth.setDate(newFirstOfMonth.getDate() - newFirstOfMonth.getDay());
       baseDate = newFirstOfMonth;
       generateCalendar();
+    });
+    document.getElementById("showListButton").addEventListener("click", function() {
+      document.getElementById("showListModal").style.display = "block";
+    });
+    document.getElementById("closeShowListModal").addEventListener("click", function() {
+      document.getElementById("showListModal").style.display = "none";
     });
   </script>
 </body>
