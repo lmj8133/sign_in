@@ -262,6 +262,7 @@
         <input id="checkinHours" type="text" placeholder="1" value="1">
       </div>
       <div class="modal-buttons">
+        <button id="confirmCheckinToday" style="background:#34a853; color:white;">Check In Today</button>
         <button id="confirmCheckin" style="background:#34a853; color:white;">Check In</button>
         <button id="remarkButton" style="background:#1a73e8; color:white;">Remark</button>
         <button id="cancelCheckin" style="background:#ea4335; color:white;">Cancel</button>
@@ -527,6 +528,9 @@
           }
           populateCheckinDropdown();
           document.getElementById("checkinModal").style.display = "block";
+          // Show the regular check-in button and hide the today button
+          document.getElementById("confirmCheckin").style.display = "inline-block";
+          document.getElementById("confirmCheckinToday").style.display = "none";
         });
       });
     }
@@ -634,6 +638,9 @@
             
             // Show the check-in modal
             document.getElementById("checkinModal").style.display = "block";
+            // Hide the regular check-in button and show only the today button
+            document.getElementById("confirmCheckin").style.display = "none";
+            document.getElementById("confirmCheckinToday").style.display = "inline-block";
             
             // Remove the options menu
             if (options.parentNode) {
@@ -721,20 +728,59 @@
       });
     }
     
+    // Original check-in function for calendar-initiated check-ins
     document.getElementById("confirmCheckin").addEventListener("click", function() {
       const selectedName = document.getElementById("checkinNameSelect").value;
       const remark = document.getElementById("checkinRemark").value.trim();
       const hours = parseFloat(document.getElementById("checkinHours").value) || 1;
       
-      // If currentDay is not set (when coming from name list), use today's date
-      if (!currentDay) {
-        const today = new Date();
-        currentDay = today.getDate().toString();
-      }
-      
       if (selectedName && currentDay) {
+        // Check if the user has already checked in for this day
+        const dateKey = formatDateKey(new Date(currentYear, currentMonth, parseInt(currentDay)));
+        const alreadyCheckedIn = checkinData[dateKey] && 
+          checkinData[dateKey].some(record => 
+            (typeof record === 'object' ? record.name : record) === selectedName
+          );
+          
+        if (alreadyCheckedIn) {
+          alert("This person has already checked in for this day.");
+          document.getElementById("checkinModal").style.display = "none";
+          document.getElementById("checkinRemark").value = "";
+          document.getElementById("checkinHours").value = 1;
+          currentDay = null;
+          return;
+        }
+        
+        socket.emit("message", { 
+          action: "checkin", 
+          year: currentYear, 
+          month: currentMonth, 
+          day: currentDay, 
+          name: selectedName, 
+          remark: remark,
+          hours: hours
+        });
+      }
+      document.getElementById("checkinModal").style.display = "none";
+      document.getElementById("checkinRemark").value = "";
+      document.getElementById("checkinHours").value = 1;
+      currentDay = null;
+    });
+    
+    // New check-in function for name list-initiated check-ins (always uses today's date)
+    document.getElementById("confirmCheckinToday").addEventListener("click", function() {
+      const selectedName = document.getElementById("checkinNameSelect").value;
+      const remark = document.getElementById("checkinRemark").value.trim();
+      const hours = parseFloat(document.getElementById("checkinHours").value) || 1;
+      
+      // Always use today's date
+      const today = new Date();
+      const todayDay = today.getDate().toString();
+      const todayYear = today.getFullYear();
+      const todayMonth = today.getMonth();
+      
+      if (selectedName) {
         // Check if the user has already checked in for today
-        const today = new Date();
         const todayKey = formatDateKey(today);
         const alreadyCheckedIn = checkinData[todayKey] && 
           checkinData[todayKey].some(record => 
@@ -752,9 +798,9 @@
         
         socket.emit("message", { 
           action: "checkin", 
-          year: currentYear, 
-          month: currentMonth, 
-          day: currentDay, 
+          year: todayYear, 
+          month: todayMonth, 
+          day: todayDay, 
           name: selectedName, 
           remark: remark,
           hours: hours
@@ -798,6 +844,10 @@
     document.getElementById("cancelCheckin").addEventListener("click", function() {
       document.getElementById("checkinModal").style.display = "none";
       document.getElementById("checkinRemark").value = "";
+      document.getElementById("checkinHours").value = 1;
+      // Reset both buttons to their default state
+      document.getElementById("confirmCheckin").style.display = "inline-block";
+      document.getElementById("confirmCheckinToday").style.display = "inline-block";
       currentDay = null;
     });
     
