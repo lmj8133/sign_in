@@ -262,6 +262,7 @@
         <input id="checkinHours" type="text" placeholder="1" value="1">
       </div>
       <div class="modal-buttons">
+        <button id="confirmCheckinToday" style="background:#34a853; color:white;">Check In Today</button>
         <button id="confirmCheckin" style="background:#34a853; color:white;">Check In</button>
         <button id="remarkButton" style="background:#1a73e8; color:white;">Remark</button>
         <button id="cancelCheckin" style="background:#ea4335; color:white;">Cancel</button>
@@ -399,6 +400,9 @@
         div.setAttribute("data-name", this.name);
         div.setAttribute("data-remark", this.remark);
         div.setAttribute("data-status", this.status);
+        if (this.hours !== null) {
+          div.setAttribute("data-hours", this.hours);
+        }
         return div;
       }
     }
@@ -527,6 +531,9 @@
           }
           populateCheckinDropdown();
           document.getElementById("checkinModal").style.display = "block";
+          // Show the regular check-in button and hide the today button
+          document.getElementById("confirmCheckin").style.display = "inline-block";
+          document.getElementById("confirmCheckinToday").style.display = "none";
         });
       });
     }
@@ -574,7 +581,17 @@
                 editTarget = this;
                 editModal.querySelector("p").innerText = "Edit Check-in Record - " + personName + " (" + tuition + ")";
                 document.getElementById("editRemarkInput").value = this.getAttribute("data-remark");
-                const currentHours = this.innerHTML.match(/\[(.*?)\]/);
+                // Extract hours from the innerHTML, looking for the pattern [X hr].
+                // If not found, try to get it from the record object in checkinData
+                // Get the hours value from the data attribute if it exists, otherwise try to extract from innerHTML
+                let currentHours = null;
+                // First check if we have a data attribute for hours
+                if (this.getAttribute("data-hours")) {
+                  currentHours = [null, this.getAttribute("data-hours")];
+                } else {
+                  // Otherwise try to extract from the innerHTML
+                  currentHours = this.innerHTML.match(/\[(.*?) hr\]/);
+                }
                 document.getElementById("editHoursInput").value = currentHours ? currentHours[1] : 1;
                 editModal.style.display = "block";
               }
@@ -606,13 +623,81 @@
         const li = document.createElement("li");
         li.innerText = `${user.name} - ${user.added_hours} hrs`;
         li.style.backgroundColor = CheckinRecord.colorMapping[user.name] || "#ffffff";
-        li.addEventListener("click", function() {
-          if (confirm(`Do you want to delete ${user.name} from the list?`)) {
-            nameList = nameList.filter(u => u.name !== user.name);
-            delete CheckinRecord.colorMapping[user.name];
-            updateNameListDisplay();
-            sendNameListUpdate();
-          }
+        li.addEventListener("click", function(e) {
+          e.stopPropagation();
+          // Show options in a context menu style
+          const options = document.createElement("div");
+          options.style.position = "absolute";
+          options.style.backgroundColor = "white";
+          options.style.border = "1px solid #ccc";
+          options.style.borderRadius = "4px";
+          options.style.padding = "5px";
+          options.style.boxShadow = "0 2px 5px rgba(0,0,0,0.2)";
+          options.style.zIndex = "1002";
+          
+          const checkInOption = document.createElement("div");
+          checkInOption.innerText = "Check In Today";
+          checkInOption.style.padding = "8px 12px";
+          checkInOption.style.cursor = "pointer";
+          checkInOption.style.borderBottom = "1px solid #eee";
+          checkInOption.addEventListener("click", function() {
+            // Set current day to today's date
+            const today = new Date();
+            currentDay = today.getDate().toString();
+            
+            // Pre-select this user in the dropdown
+            populateCheckinDropdown();
+            document.getElementById("checkinNameSelect").value = user.name;
+            
+            // Show the check-in modal
+            document.getElementById("checkinModal").style.display = "block";
+            // Hide the regular check-in button and show only the today button
+            document.getElementById("confirmCheckin").style.display = "none";
+            document.getElementById("confirmCheckinToday").style.display = "inline-block";
+            
+            // Remove the options menu
+            if (options.parentNode) {
+              options.parentNode.removeChild(options);
+            }
+          });
+          options.appendChild(checkInOption);
+          
+          const deleteOption = document.createElement("div");
+          deleteOption.innerText = "Delete From List";
+          deleteOption.style.padding = "8px 12px";
+          deleteOption.style.cursor = "pointer";
+          deleteOption.style.color = "#ea4335";
+          deleteOption.addEventListener("click", function() {
+            if (confirm(`Do you want to delete ${user.name} from the list?`)) {
+              nameList = nameList.filter(u => u.name !== user.name);
+              delete CheckinRecord.colorMapping[user.name];
+              updateNameListDisplay();
+              sendNameListUpdate();
+            }
+            // Remove the options menu
+            if (options.parentNode) {
+              options.parentNode.removeChild(options);
+            }
+          });
+          options.appendChild(deleteOption);
+          
+          // Position the options menu near the clicked element
+          document.body.appendChild(options);
+          options.style.left = `${e.pageX}px`;
+          options.style.top = `${e.pageY}px`;
+          
+          // Close the menu when clicking elsewhere
+          const closeMenu = function(e) {
+            if (!options.contains(e.target) && e.target !== li) {
+              if (options.parentNode) {
+                options.parentNode.removeChild(options);
+              }
+              document.removeEventListener("click", closeMenu);
+            }
+          };
+          setTimeout(() => {
+            document.addEventListener("click", closeMenu);
+          }, 0);
         });
         ul.appendChild(li);
       });
@@ -656,11 +741,29 @@
       });
     }
     
+    // Original check-in function for calendar-initiated check-ins
     document.getElementById("confirmCheckin").addEventListener("click", function() {
       const selectedName = document.getElementById("checkinNameSelect").value;
       const remark = document.getElementById("checkinRemark").value.trim();
       const hours = parseFloat(document.getElementById("checkinHours").value) || 1;
+      
       if (selectedName && currentDay) {
+        // Check if the user has already checked in for this day
+        const dateKey = formatDateKey(new Date(currentYear, currentMonth, parseInt(currentDay)));
+        const alreadyCheckedIn = checkinData[dateKey] && 
+          checkinData[dateKey].some(record => 
+            (typeof record === 'object' ? record.name : record) === selectedName
+          );
+          
+        if (alreadyCheckedIn) {
+          alert("This person has already checked in for this day.");
+          document.getElementById("checkinModal").style.display = "none";
+          document.getElementById("checkinRemark").value = "";
+          document.getElementById("checkinHours").value = 1;
+          currentDay = null;
+          return;
+        }
+        
         socket.emit("message", { 
           action: "checkin", 
           year: currentYear, 
@@ -671,6 +774,52 @@
           hours: hours
         });
       }
+      document.getElementById("checkinModal").style.display = "none";
+      document.getElementById("checkinRemark").value = "";
+      document.getElementById("checkinHours").value = 1;
+      currentDay = null;
+    });
+    
+    // New check-in function for name list-initiated check-ins (always uses today's date)
+    document.getElementById("confirmCheckinToday").addEventListener("click", function() {
+      const selectedName = document.getElementById("checkinNameSelect").value;
+      const remark = document.getElementById("checkinRemark").value.trim();
+      const hours = parseFloat(document.getElementById("checkinHours").value) || 1;
+      
+      // Always use today's date
+      const today = new Date();
+      const todayDay = today.getDate().toString();
+      const todayYear = today.getFullYear();
+      const todayMonth = today.getMonth();
+      
+      if (selectedName) {
+        // Check if the user has already checked in for today
+        const todayKey = formatDateKey(today);
+        const alreadyCheckedIn = checkinData[todayKey] && 
+          checkinData[todayKey].some(record => 
+            (typeof record === 'object' ? record.name : record) === selectedName
+          );
+          
+        if (alreadyCheckedIn) {
+          alert("This person has already checked in for today.");
+          document.getElementById("checkinModal").style.display = "none";
+          document.getElementById("checkinRemark").value = "";
+          document.getElementById("checkinHours").value = 1;
+          currentDay = null;
+          return;
+        }
+        
+        socket.emit("message", { 
+          action: "checkin", 
+          year: todayYear, 
+          month: todayMonth, 
+          day: todayDay, 
+          name: selectedName, 
+          remark: remark,
+          hours: hours
+        });
+      }
+      document.getElementById("showListModal").style.display = "none";
       document.getElementById("checkinModal").style.display = "none";
       document.getElementById("checkinRemark").value = "";
       document.getElementById("checkinHours").value = 1;
@@ -709,6 +858,10 @@
     document.getElementById("cancelCheckin").addEventListener("click", function() {
       document.getElementById("checkinModal").style.display = "none";
       document.getElementById("checkinRemark").value = "";
+      document.getElementById("checkinHours").value = 1;
+      // Reset both buttons to their default state
+      document.getElementById("confirmCheckin").style.display = "inline-block";
+      document.getElementById("confirmCheckinToday").style.display = "inline-block";
       currentDay = null;
     });
     
@@ -773,6 +926,8 @@
       generateCalendar();
     });
     document.getElementById("showListButton").addEventListener("click", function() {
+      // Request updated name list data from the server before showing the modal
+      socket.emit("get_names");
       document.getElementById("showListModal").style.display = "block";
     });
     document.getElementById("closeShowListModal").addEventListener("click", function() {
