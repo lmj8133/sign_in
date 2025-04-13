@@ -22,6 +22,10 @@
       justify-content: space-between;
       margin-bottom: 10px;
     }
+    #calendarTitle {
+      margin: 0;
+      cursor: pointer;
+    }
     .arrow-button {
       width: 40px;
       height: 40px;
@@ -964,6 +968,27 @@
       baseDate = newFirstOfMonth;
       generateCalendar();
     });
+    
+    // Add click event to calendar title to reset to today
+    document.getElementById("calendarTitle").addEventListener("click", function() {
+      // Reset to today's date
+      const today = new Date();
+      const firstOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
+      baseDate = new Date(firstOfMonth);
+      baseDate.setDate(firstOfMonth.getDate() - firstOfMonth.getDay());
+      generateCalendar();
+    });
+    
+    // Add click event to calendar title to reset to today
+    document.getElementById("calendarTitle").addEventListener("click", function() {
+      // Reset to today's date
+      const today = new Date();
+      const firstOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
+      baseDate = new Date(firstOfMonth);
+      baseDate.setDate(firstOfMonth.getDate() - firstOfMonth.getDay());
+      generateCalendar();
+    });
+    
     document.getElementById("showListButton").addEventListener("click", function() {
       // Request updated name list data from the server before showing the modal
       socket.emit("get_names");
