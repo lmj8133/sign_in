@@ -546,6 +546,13 @@
         if (checkinData[dateKey]) {
           checkinData[dateKey].forEach(record => {
             let personName = typeof record === "object" ? record.name : record;
+            
+            // Check if this person is in the nameList and if their checkbox is checked
+            const userInList = nameList.find(u => u.name === personName);
+            if (!userInList || (userInList.checked === false)) {
+              return; // Skip this record if user is not in list or checkbox is unchecked
+            }
+            
             let remark = typeof record === "object" ? record.remark : "";
             let status = (typeof record === "object" && record.status) ? record.status : (remark ? "remark" : "checkin");
             let displayedDay = td.querySelector(".date").innerText;
@@ -620,9 +627,41 @@
       const ul = document.getElementById("nameListUl");
       ul.innerHTML = "";
       nameList.forEach(user => {
+        // Initialize checked property if it doesn't exist
+        if (user.checked === undefined) {
+          user.checked = true; // Default to checked
+        }
+        
         const li = document.createElement("li");
-        li.innerText = `${user.name} - ${user.added_hours} hrs`;
+        
+        // Create checkbox image instead of input checkbox
+        const checkbox = document.createElement("img");
+        checkbox.src = user.checked 
+          ? "https://img.icons8.com/color/16/000000/checked-checkbox.png" 
+          : "https://img.icons8.com/color/16/000000/unchecked-checkbox.png";
+        checkbox.style.marginRight = "8px";
+        checkbox.style.verticalAlign = "middle";
+        checkbox.style.cursor = "pointer";
+        checkbox.addEventListener("click", function(e) {
+          e.stopPropagation();
+          user.checked = !user.checked;
+          this.src = user.checked 
+            ? "https://img.icons8.com/color/16/000000/checked-checkbox.png" 
+            : "https://img.icons8.com/color/16/000000/unchecked-checkbox.png";
+          sendNameListUpdate();
+          loadCheckinsForMonth(); // Refresh calendar to apply filter
+        });
+        
+        // Create label for name and hours
+        const label = document.createElement("span");
+        label.innerText = `${user.name} - ${user.added_hours} hrs`;
+        
+        // Append checkbox and label to li
+        li.appendChild(checkbox);
+        li.appendChild(label);
         li.style.backgroundColor = CheckinRecord.colorMapping[user.name] || "#ffffff";
+        li.style.display = "flex";
+        li.style.alignItems = "center";
         li.addEventListener("click", function(e) {
           e.stopPropagation();
           // Show options in a context menu style
