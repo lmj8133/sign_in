@@ -570,6 +570,21 @@
               let tuition = userRecord ? userRecord.tuition : "";
               let currentStatus = this.getAttribute("data-status");
               if (currentStatus === "checkin") {
+                let editModal = document.getElementById("editRecordModal");
+                editTarget = this;
+                editModal.querySelector("p").innerText = "Edit Check-in Record - " + personName + " (" + tuition + ")";
+                document.getElementById("editRemarkInput").value = this.getAttribute("data-remark") || "";
+                
+                // Get the hours value from the data attribute if it exists, otherwise try to extract from innerHTML
+                let currentHours = null;
+                if (this.getAttribute("data-hours")) {
+                  currentHours = [null, this.getAttribute("data-hours")];
+                } else {
+                  currentHours = this.innerHTML.match(/\[(.*?) hr\]/);
+                }
+                document.getElementById("editHoursInput").value = currentHours ? currentHours[1] : 1;
+                
+                // Set up the cancel record button to show the remove modal
                 let removeModal = document.getElementById("removeRecordModal");
                 removeModal.querySelector("p").innerText = "Remove Record - " + personName + " (" + tuition + ")";
                 document.getElementById("confirmRemoveRecord").onclick = () => {
@@ -582,11 +597,13 @@
                     name: personName
                   });
                   removeModal.style.display = "none";
+                  editModal.style.display = "none";
                 };
                 document.getElementById("cancelRemoveRecord").onclick = () => {
                   removeModal.style.display = "none";
                 };
-                removeModal.style.display = "block";
+                
+                editModal.style.display = "block";
               } else {
                 let editModal = document.getElementById("editRecordModal");
                 editTarget = this;
@@ -914,22 +931,23 @@
         const day = editTarget.getAttribute("data-day");
         const currentStatus = editTarget.getAttribute("data-status");
         const newRemark = document.getElementById("editRemarkInput").value.trim();
-        if (currentStatus !== "checkin") {
-          const newHours = parseFloat(document.getElementById("editHoursInput").value) || 1;
-          socket.emit("message", { 
-            action: "checkin", 
-            year: currentYear, 
-            month: currentMonth, 
-            day: day, 
-            name: name, 
-            remark: newRemark,
-            hours: newHours
-          });
-        }
+        const newHours = parseFloat(document.getElementById("editHoursInput").value) || 1;
+        
+        // Update all records regardless of status
+        socket.emit("message", { 
+          action: "checkin", 
+          year: currentYear, 
+          month: currentMonth, 
+          day: day, 
+          name: name, 
+          remark: newRemark,
+          hours: newHours
+        });
       }
       document.getElementById("editRecordModal").style.display = "none";
       editTarget = null;
     });
+
     
     document.getElementById("cancelRecordButton").addEventListener("click", function() {
       if (editTarget) {
